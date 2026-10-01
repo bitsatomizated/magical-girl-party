@@ -95,8 +95,8 @@ GAME_DATA.characters = {
   },
   char_pixel_meow: {
     id: "char_pixel_meow", name: "像素喵喵",
-    // 立绘：单张全身图，头像处由 CSS 圆形裁剪生成缩略；正式图做好后替换 PNG 并同步此处路径
-    art: { full: "assets/chars/char_pixel_meow_full.png" },
+    // 立绘：单张全身图，头像处由 CSS 圆形裁剪生成缩略；替换素材时同步此处路径
+    art: { full: "assets/chars/char_pixel_meow_full.webp" },
     hpMax: 20, attack: 3, defense: 1,
     move: { dice: 1, faces: 10 },
     initialCoins: 12,
@@ -169,7 +169,7 @@ GAME_DATA.monsters = {
                crazy:     { hpMax: 14 },
              } },
   maid_sprite: { id: "maid_sprite", name: "女仆精灵", category: "minion", hpMax: 8, attack: 2, defense: 0,
-             art: { full: "assets/chars/mob_maid_sprite_full.png" },
+             art: { full: "assets/chars/mob_maid_sprite_full.webp" },
              move: { steps: 1 }, coinDrop: 6, tags: ["aggressive"],
              // 分难度数值（未写的项沿用普通值）
              diffStats: {
