@@ -212,12 +212,12 @@ GAME_DATA.monsters = {
 
 // ---- 可选地图注册表 ----
 GAME_DATA.maps = {
-  // 测试地图：单环 20 格 + BOSS 驻守（拓扑按地图配置，文档03 §1）；hidden：不在选关界面展示，仅供测试
-  test_ring: {
-    id: "test_ring",
-    name: "测试环道",
-    hidden: true,
-    rounds: 16,
+  // 新手教学地图：单环 20 格 + 驻守 BOSS 毕业考；节奏平缓，逐轮引入刷怪与全局强化
+  tutorial_ring: {
+    id: "tutorial_ring",
+    name: "练习环道",
+    intro: "这是一条用于热身的练习环道。沿着环道前进，熟悉移动、战斗、商店与筹码的玩法；行至深处，驻守的灾厄核心将是你出师前的最后一考。",
+    rounds: 12,
   bossTile: 10,
   startTile: 0,
   upgradeCost: (star) => [15, 20, 25][star] ?? null, // 升星费用：1星15 / 2星20 / 3星25，满级 null
@@ -227,15 +227,24 @@ GAME_DATA.maps = {
   tiles: [
     { t: "start" },   { t: "draw" },   { t: "event" },  { t: "shop" },
     { t: "spawn", mob: "dummy" }, { t: "heal" }, { t: "dash" }, { t: "event" },
-    { t: "spawn", mob: "sentinel" }, { t: "chipshop" }, { t: "boss" }, { t: "damage" },
-    { t: "draw" }, { t: "spawn", mob: "dummy" }, { t: "event" }, { t: "upgrade" },
+    { t: "event" }, { t: "chipshop" }, { t: "boss" }, { t: "damage" },
+    { t: "draw" }, { t: "event" }, { t: "event" }, { t: "upgrade" },
     { t: "heal" }, { t: "assault" }, { t: "event" }, { t: "damage" },
   ],
-  globalEvents: [ { round: 8, desc: "全地图怪物攻防+1", effect: "allMonstersPlus1" } ],
+  globalEvents: [
+    { round: 3, name: "再热热身", desc: "又一只训练假人出现在环道上",
+      spawns: [ { mob: "dummy", tiles: [13] } ] },
+    { round: 5, name: "哨兵出动", desc: "哨兵机兵开始巡逻环道",
+      spawns: [ { mob: "sentinel", tiles: [8] } ] },
+    { round: 8, name: "强度上升", desc: "全体怪物攻防+1（此后出现的敌人同样生效）",
+      spawns: [ { mob: "dummy", tiles: [13] } ],
+      effect: "allMonstersStats", atk: 1, def: 1 },
+  ],
   // 地图任务：每轮结束时判定一次（非实时），奖励 = 对应概率等级的筹码 3 选 1
   quests: [
     { desc: "击倒训练假人", target: "dummy",    need: 2, rewardTier: 1 },
     { desc: "击倒哨兵机兵", target: "sentinel", need: 1, rewardTier: 2 },
+    { desc: "击倒灾厄核心，完成出师试炼", target: "boss", need: 1, rewardTier: 3 },
   ],
   },
   // 岔路地图：单环 + 一条横穿捷径（3↔9），形成两处三岔口；检验图拓扑移动；hidden：仅供测试
