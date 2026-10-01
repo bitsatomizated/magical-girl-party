@@ -651,12 +651,12 @@ window.Engine = (() => {
     ], detail);
   }
 
-  // 路过可停留地块时的询问文案：升级点附带升星差价，便于判断是否值得停下
+  // 路过可停留地块时的询问文案：起始点/升级点附带升星差价，便于判断是否值得停下
   function stopPrompt(t, steps) {
     const suffix = `（剩余 ${steps} 步将放弃）`;
-    if (t !== "upgrade") return `经过${TILE_CN[t]}，是否停留？${suffix}`;
+    if (t !== "upgrade" && t !== "start") return `经过${TILE_CN[t]}，是否停留？${suffix}`;
     const cost = D.map.upgradeCost(S.player.star);
-    if (cost == null) return `经过升级点，是否停留？你已达最高星级。${suffix}`;
+    if (cost == null) return `经过${TILE_CN[t]}，是否停留？你已达最高星级。${suffix}`;
     const gap = cost - S.player.coins;
     const info = gap > 0
       ? `升到 ${S.player.star + 1} 星需要 ${cost} 金币，还差 ${gap} 金币（现有 ${S.player.coins}）。`
@@ -846,6 +846,8 @@ window.Engine = (() => {
         break;
       }
       case "upgrade": {
+        P.hp = Math.min(P.hpMax, P.hp + 2);
+        log("升级点：回复 2 点生命。", "good");
         if (D.map.upgradeCost(P.star) == null) { log("升级点：已达最高星级。"); break; }
         if (await tryUpgrade()) await openChipChoice();
         break;
