@@ -101,7 +101,7 @@ GAME_DATA.characters = {
     move: { dice: 1, faces: 10 },
     initialCoins: 12,
     activeSkill: { name: "像素化", cooldown: 3, desc: "本回合攻击力+4，且不会被怪物主动攻击，持续到下回合开始", effect: "pixelate", value: 4 },
-    passiveSkill: { name: "喵之追猎", trigger: "onMonsterPass", desc: "被怪物路过时，对怪物施加 1 层【追猎】；攻击带【追猎】的敌人时攻击力+3，然后移除 1 层", effect: "huntOnPass", value: 3 },
+    passiveSkill: { name: "喵之追猎", trigger: "onMonsterPass", desc: "被怪物路过时，对怪物施加 1 层【追猎】；攻击带【追猎】的敌人时攻击力+3；击倒带【追猎】的敌人后，随机抽取 1 张战斗牌", effect: "huntOnPass", value: 3 },
   },
 };
 

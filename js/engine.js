@@ -986,7 +986,7 @@ window.Engine = (() => {
   }
 
   // 攻击总力：基础 + 筹码（财力/生命之力/猎印III/散财）+ 技能 + 战斗牌
-  // preview=true 时只做数值预览，不触发任何消耗副作用（追猎层数移除 / 散财扣币）与日志
+  // preview=true 时只做数值预览，不触发任何消耗副作用（散财扣币）与日志
   function computeAttack(target, b, preview = false) {
     const P = S.player;
     let atk = derived().atk + (b ? b.cardBonus : 0) + (P.atkBuffNextBattle || 0); // derived 已含 buffSum("atk")
@@ -997,11 +997,11 @@ window.Engine = (() => {
     const lfCount = chipList().filter(c => c.fullHpAtk).length;
     if (P.hp >= P.hpMax && lfCount > 0) atk += chipSum("fullHpAtk") + P.regen * lfCount;
     if (target && hasChip(c => c.atkPerMark)) atk += target.marks || 0; // 猎印 III
-    // 喵之追猎：目标带追猎层 → 攻击 +value，结算后移除 1 层
+    // 喵之追猎：目标带追猎层 → 攻击 +value（层数不消耗，持续提供加成）
     const pv = D.player.passiveSkill?.effect === "huntOnPass" ? (D.player.passiveSkill.value || 3) : 0;
     if (target && pv > 0 && (target.hunt || 0) > 0) {
       atk += pv;
-      if (!preview) { target.hunt--; log(`【喵之追猎】目标带【追猎】：攻击 +${pv}，移除 1 层（剩 ${target.hunt}）。`, "good"); }
+      if (!preview) { log(`【喵之追猎】目标带【追猎】：攻击 +${pv}。`, "good"); }
     }
     if (hasChip(c => c.sancai) && P.coins > 20) { // 散财
       const bonus = Math.floor(P.coins * 0.3);
@@ -1022,7 +1022,9 @@ window.Engine = (() => {
     const pv = D.player.passiveSkill?.effect === "huntOnPass" ? (D.player.passiveSkill.value || 3) : 0;
     if (target && pv > 0 && (target.hunt || 0) > 0) parts.push(`追猎+${pv}`);
     if (hasChip(c => c.sancai) && P.coins > 20) parts.push(`散财+${Math.floor(P.coins * 0.3)}（耗8金币）`);
-    return { total: computeAttack(target, null, true), parts, stance: target ? monsterStance(target) : null };
+    return { total: computeAttack(target, null, true), parts, stance: target ? monsterStance(target) : null,
+      enemyAtk: target ? target.atk + (target.nextBattleAtk || 0) : null,
+      enemyDef: target ? target.def_ + (target.nextBattleDef || 0) : null };
   }
 
   function onHitEnemy(target) {
@@ -1085,14 +1087,16 @@ window.Engine = (() => {
     }
     const pRoll = d6(), mRoll = d6();
     const stance = monsterStance(t);
+    const enemyDef = t.def_ + (t.nextBattleDef || 0); // 骑士守护：本次防守计入临时防御
+    t.nextBattleAtk = 0; t.nextBattleDef = 0; // 「下次战斗」仅生效一次，反击是另一场战斗
     let dmg;
     if (stance === "dodge") {
       const ok = pRoll >= mRoll;
       if (ok) { log(`闪避成功（${pRoll} vs ${mRoll}）：未造成伤害。`, "battle"); dmg = 0; }
       else { dmg = Math.max(1, atk + pRoll - mRoll); log(`闪避失败（${pRoll} vs ${mRoll}）：防御按0结算。`, "battle"); }
     } else {
-      dmg = Math.max(1, atk + pRoll - (t.def_ + mRoll));
-      log(`对拼：我方 ${atk}+${pRoll} vs 敌方 ${t.def_}+${mRoll}（防御姿态）`);
+      dmg = Math.max(1, atk + pRoll - (enemyDef + mRoll));
+      log(`对拼：我方 ${atk}+${pRoll} vs 敌方 ${enemyDef}+${mRoll}（防御姿态）`);
     }
     if (dmg > 0 && b.finalMult > 1) { dmg = Math.floor(dmg * b.finalMult); log(`【全力攻击】最终结算 ×${b.finalMult} → ${dmg} 点！`, "battle"); }
     if (dmg > 0) dealToMonster(t, dmg);
@@ -1119,6 +1123,16 @@ window.Engine = (() => {
     // 击倒类词条：财力 II 击倒敌人获得财富层
     const kw = chipSum("killWealth");
     if (kw > 0) { S.player.wealth += kw; log(`【财力 II】击倒敌人：财富层数 +${kw}（现 ${S.player.wealth}）。`, "good"); }
+    // 喵之追猎：击倒带【追猎】的敌人后，随机抽取 1 张战斗牌
+    if (D.player.passiveSkill?.effect === "huntOnPass" && (t.hunt || 0) > 0) {
+      if (S.player.hand.length >= 8) {
+        log("【喵之追猎】击倒带【追猎】的敌人，但手牌已满（8），无法抽取。", "warn");
+      } else {
+        const card = D.cards[D.battlePool[rnd(D.battlePool.length)]];
+        S.player.hand.push({ ...card });
+        log(`【喵之追猎】击倒带【追猎】的敌人：抽取 1 张战斗牌【${card.name}】。`, "good");
+      }
+    }
     // 任务计数（实时累计，完成判定在每轮结束时统一进行）
     S.quests?.forEach(q => {
       const hit = q.targets ? q.targets.includes(t.def.id) : q.target === t.def.id;
@@ -1154,15 +1168,14 @@ window.Engine = (() => {
       else { dmg = Math.max(1, mAtk + mRoll - pRoll); log("闪避失败：防御按0结算！", "battle"); }
     } else {
       const myDef = derived().def + (b.defBonus || 0);
-      const eDef = t.def_ + (t.nextBattleDef || 0); // 骑士守护：下次战斗防御+3
       dmg = Math.max(1, (mAtk + mRoll) - (myDef + pRoll));
       log(`对拼：敌方 ${mAtk}+${mRoll} vs 我方 ${myDef}+${pRoll}`);
     }
     t.nextBattleAtk = 0; t.nextBattleDef = 0; // 消耗「下次战斗」加成
-    if (dmg > 0) playerTakesDamage(dmg, `【${t.name}】的攻击`);
-    // 鲜血汲取：攻击玩家后回复等量生命
-    if (dmg > 0 && t.hp > 0 && t.def.passives?.some(p => p.effect === "bloodDrain")) {
-      const heal = Math.min(t.hpMax - t.hp, dmg);
+    const dealt = dmg > 0 ? playerTakesDamage(dmg, `【${t.name}】的攻击`) : 0;
+    // 鲜血汲取：按实际结算伤害回血，包含不屈减伤与狂暴增伤
+    if (dealt > 0 && t.hp > 0 && t.def.passives?.some(p => p.effect === "bloodDrain")) {
+      const heal = Math.min(t.hpMax - t.hp, dealt);
       if (heal > 0) { t.hp += heal; log(`【鲜血汲取】：【${t.name}】恢复 ${heal} 点（现 ${t.hp}）。`, "battle"); }
     }
     checkPlayerKo();
@@ -1270,12 +1283,12 @@ window.Engine = (() => {
     S._dbg.aiStart++;
     if (S.over || S.aiBusy) return;
     S.aiBusy = true;
-    const list = S.monsters.slice();
-    let i = 0;
+    const acted = new Set(); // 按登场顺序取尚未行动的怪物，纳入本轮新生成的分身
     const step = () => {
       if (S.over) { S.aiBusy = false; return; }
-      if (i >= list.length) { S.aiBusy = false; S._dbg.aiEnd++; endRound(); return; }
-      const m = list[i++];
+      const m = S.monsters.find(x => !acted.has(x.uid));
+      if (!m) { S.aiBusy = false; S._dbg.aiEnd++; endRound(); return; }
+      acted.add(m.uid);
       if (m.hp <= 0 || m.def.move?.stationary) { step(); return; } // 驻守怪跳过；可移动 BOSS（晕彩）正常行动
       if (m.skillCd > 0) m.skillCd--;
       aiMove(m, () => { window.UI.renderAll(); setTimeout(step, AI_DELAY); });
@@ -1391,9 +1404,9 @@ window.Engine = (() => {
           m.hunt = (m.hunt || 0) + 1;
           log(`【喵之追猎】发动：【${m.name}】路过玩家，获得 1 层【追猎】（现 ${m.hunt}）。`, "good");
         }
-        if (S.player.buffs.some(b => b.pixel)) {
+        if (m.def.tags.includes("aggressive") && S.player.buffs.some(b => b.pixel)) {
           log(`【像素化】：【${m.name}】无法主动攻击你，继续移动。`);
-        } else {
+        } else if (m.def.tags.includes("aggressive")) {
           monsterAttack(m);
           return;
         }

@@ -396,12 +396,13 @@ window.UI = (() => {
       const t = b.target;
       const dv = Engine.derived();
       const apv = Engine.attackPreview ? Engine.attackPreview(t) : { total: dv.atk, parts: [] };
+      const enemyAtk = apv.enemyAtk ?? t.atk, enemyDef = apv.enemyDef ?? t.def_;
       const STANCE_CN_UI = { defend: "防御", dodge: "闪避" };
       $("battle-title").textContent = `战斗：对【${t.name}】`;
       $("battle-info").innerHTML =
         `<b>我方</b>攻击 <b>${apv.total}</b>${b.cardBonus ? "+" + b.cardBonus : ""}${apv.parts.length ? `（${apv.parts.join("，")}）` : ""}｜战斗点数 <b>${Engine.playerBattlePoints() - b.spentPoints}</b>（已用 ${b.spentPoints}）<br>` +
-        `<b>敌方</b>【${t.name}】HP <b>${t.hp}/${t.hpMax}</b>｜攻 <b>${t.atk}</b>｜防 <b>${t.def_}</b>｜姿态 <b>${STANCE_CN_UI[apv.stance] || "防御"}</b>${t.marks ? `｜标记 ${t.marks} 层（我方伤害 +${t.marks}）` : ""}<br>` +
-        `结算：我方 ${apv.total}${b.cardBonus ? "+" + b.cardBonus : ""} + 我方骰 vs 敌方 ${t.def_} + 敌方骰，伤害保底 1${apv.stance === "dodge" ? "；敌方闪避姿态时改比骰点（我方骰 ≥ 敌方骰则它不受伤）" : ""}`;
+        `<b>敌方</b>【${t.name}】HP <b>${t.hp}/${t.hpMax}</b>｜攻 <b>${enemyAtk}</b>｜防 <b>${enemyDef}</b>｜姿态 <b>${STANCE_CN_UI[apv.stance] || "防御"}</b>${t.marks ? `｜标记 ${t.marks} 层（我方伤害 +${t.marks}）` : ""}<br>` +
+        `结算：我方 ${apv.total}${b.cardBonus ? "+" + b.cardBonus : ""} + 我方骰 vs 敌方 ${enemyDef} + 敌方骰，伤害保底 1${apv.stance === "dodge" ? "；敌方闪避姿态时改比骰点（我方骰 ≥ 敌方骰则它不受伤）" : ""}`;
       const pts = Engine.playerBattlePoints() - b.spentPoints;
       S.player.hand.filter(c => c.type === "battle" && c.kind === "atk").forEach(c => {
         const el = document.createElement("div");
