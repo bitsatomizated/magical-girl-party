@@ -620,6 +620,19 @@ window.Engine = (() => {
   const TILE_CN = { start: "起始点", upgrade: "升级点", chipshop: "筹码商店" };
   const CAN_STOP = ["start", "upgrade"];
 
+  // 路过可停留地块时的询问文案：升级点附带升星差价，便于判断是否值得停下
+  function stopPrompt(t, steps) {
+    const suffix = `（剩余 ${steps} 步将放弃）`;
+    if (t !== "upgrade") return `经过${TILE_CN[t]}，是否停留？${suffix}`;
+    const cost = D.map.upgradeCost(S.player.star);
+    if (cost == null) return `经过升级点，是否停留？你已达最高星级。${suffix}`;
+    const gap = cost - S.player.coins;
+    const info = gap > 0
+      ? `升到 ${S.player.star + 1} 星需要 ${cost} 金币，还差 ${gap} 金币（现有 ${S.player.coins}）。`
+      : `升到 ${S.player.star + 1} 星需要 ${cost} 金币，金币充足（现有 ${S.player.coins}）。`;
+    return `经过升级点，是否停留？${info}${suffix}`;
+  }
+
   async function stepPlayer() {
     const mv = S.move;
     // 被击倒后立即停止行动（设计文档02 §6「跳过后续行动」）：剩余步数作废，由落格结算收尾
@@ -653,7 +666,7 @@ window.Engine = (() => {
       if (S.over || S.battle) break;
       if (mv.steps === 0) break; // 已到目标格：落地结算在循环外
       const cur = S.tiles[S.player.pos];
-      if (CAN_STOP.includes(cur.t) && confirm(`经过${TILE_CN[cur.t]}，是否停留？（剩余 ${mv.steps} 步将放弃）`)) {
+      if (CAN_STOP.includes(cur.t) && confirm(stopPrompt(cur.t, mv.steps))) {
         mv.steps = 0;
         break;
       }
@@ -837,7 +850,7 @@ window.Engine = (() => {
       applyStarGrowth(P.star);
       return true;
     }
-    log(`升级：升到 ${P.star + 1} 星需要 ${cost} 金币（金币不足）。`, "warn");
+    log(`升级：升到 ${P.star + 1} 星需要 ${cost} 金币，还差 ${cost - P.coins} 金币（现有 ${P.coins}）。`, "warn");
     return false;
   }
 

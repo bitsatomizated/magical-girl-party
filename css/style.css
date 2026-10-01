@@ -35,6 +35,21 @@ body { font-family: "Microsoft YaHei", sans-serif; background: #14141f; color: #
 .help-sec b { color: #ffd76e; }
 #btn-help-back { align-self: center; font-size: 16px; padding: 9px 34px; }
 
+/* ---- 开场剧情页 ---- */
+#intro-screen { position: fixed; inset: 0; z-index: 100; background: #14141f; display: flex; align-items: center; justify-content: center; padding: 24px; overflow-y: auto; }
+#intro-screen.hidden { display: none; }
+#intro-body { max-width: 640px; display: flex; flex-direction: column; gap: 20px; background: #1c1c2c; border: 1px solid #3a3a5a; border-radius: 10px; padding: 32px 36px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+#intro-body h1 { color: #ffd76e; letter-spacing: 4px; font-size: 26px; }
+#intro-text { font-size: 15px; line-height: 2; color: #c8c8dc; text-indent: 2em; }
+#btn-intro-ok { align-self: center; font-size: 16px; padding: 9px 34px; margin-top: 4px; }
+
+/* ---- 筹码悬浮说明（浮层挂 body，避免被 #info 的滚动容器裁剪）---- */
+#info .chip-tag { cursor: help; }
+#chip-tip { position: fixed; z-index: 200; max-width: 280px; padding: 8px 10px; background: #1a1424; border: 1px solid #6a5a8a; border-radius: 8px; color: #e8e2f2; font-size: 12px; line-height: 1.6; box-shadow: 0 6px 20px rgba(0,0,0,.6); pointer-events: none; }
+#chip-tip.hidden { display: none; }
+#chip-tip .tip-meta { margin-left: 8px; color: #9a92b0; font-size: 11px; }
+#chip-tip .tip-desc { margin-top: 4px; color: #cfc8dd; }
+
 #hud { display: flex; gap: 18px; padding: 8px 16px; background: #1e1e2e; border-bottom: 1px solid #333; flex-wrap: wrap; }
 #hud .stat b { color: #ffd76e; }
 

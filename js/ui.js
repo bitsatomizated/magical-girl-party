@@ -151,7 +151,7 @@ window.UI = (() => {
     html += `<div class="info-sec"><b>我的筹码（${chips.length}）</b><br>` +
       (chips.length ? chips.map(id => {
         const c = window.GAME_DATA.chips[id];
-        return `<span class="chip-tag rarity-${c.rarity}">${c.name}</span>`;
+        return `<span class="chip-tag rarity-${c.rarity}" data-chip="${id}">${c.name}</span>`;
       }).join(" ") : "暂无") + `</div>`;
     html += `<div class="info-sec"><b>场上怪物（按登场顺序）</b>`;
     const candIds = S.targeting ? S.targeting.candidates : null; // 瞄准中的候选：列表中同样可点击锁怪
@@ -426,6 +426,68 @@ window.UI = (() => {
     parent.appendChild(b);
   }
 
+  // ---------- 筹码悬浮说明 ----------
+  // 浮层挂在 body 上：筹码列表位于 #info 内，而 #info 是 overflow-y:auto 的滚动容器，内部绝对定位会被裁剪
+  function ensureChipTip() {
+    let tip = document.getElementById("chip-tip");
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.id = "chip-tip";
+      tip.className = "hidden";
+      document.body.appendChild(tip);
+    }
+    return tip;
+  }
+
+  function hideChipTip() {
+    const tip = document.getElementById("chip-tip");
+    if (tip) tip.classList.add("hidden");
+  }
+
+  function showChipTip(tag) {
+    const c = window.GAME_DATA.chips[tag.dataset.chip];
+    if (!c) return;
+    const tip = ensureChipTip();
+    tip.innerHTML = `<b>${c.name}</b><span class="tip-meta">${c.school}·${RARITY_CN[c.rarity]}</span>` +
+      `<div class="tip-desc">${c.desc}</div>`;
+    tip.classList.remove("hidden");
+    // 先显示再量尺寸，然后按视口边界校正：默认贴上方，顶部空间不足则改到下方
+    const r = tag.getBoundingClientRect();
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    let top = r.top - th - 6;
+    if (top < 8) top = r.bottom + 6;
+    tip.style.left = Math.max(8, Math.min(r.left, window.innerWidth - tw - 8)) + "px";
+    tip.style.top = Math.max(8, Math.min(top, window.innerHeight - th - 8)) + "px";
+  }
+
+  // 事件委托：#info 的 innerHTML 每次渲染都会重建，事件必须绑在容器上才不会失效
+  function bindChipTip() {
+    const info = $("info");
+    if (!info) return;
+    info.addEventListener("mouseover", (e) => {
+      const tag = e.target.closest && e.target.closest(".chip-tag");
+      if (tag) showChipTip(tag);
+    });
+    info.addEventListener("mouseout", (e) => {
+      if (e.target.closest && e.target.closest(".chip-tag")) hideChipTip();
+    });
+    info.addEventListener("scroll", hideChipTip);
+  }
+
+  // ---------- 开场剧情 ----------
+  function beginRun() {
+    $("log").innerHTML = "";
+    window.Engine.newGame();
+  }
+
+  function showIntro() {
+    const m = window.GAME_DATA.map;
+    if (!m || !m.intro) { beginRun(); return; } // 未写剧情的地图直接开局
+    $("intro-title").textContent = m.name;
+    $("intro-text").textContent = m.intro;
+    $("intro-screen").classList.remove("hidden");
+  }
+
   // ---------- 开场选择界面 ----------
   function renderSetup() {
     const D = window.GAME_DATA;
@@ -483,6 +545,11 @@ window.UI = (() => {
       dl.appendChild(el);
     });
     $("btn-start").onclick = startGame;
+    $("btn-intro-ok").onclick = () => {
+      $("intro-screen").classList.add("hidden");
+      beginRun();
+    };
+    bindChipTip();
     // 玩法介绍页：进入/返回（遮罩互斥显示）
     $("btn-help").onclick = () => {
       $("start-screen").classList.add("hidden");
@@ -510,8 +577,7 @@ window.UI = (() => {
     D.map = D.maps[sel.map];
     D.diff = sel.diff || "normal";
     $("start-screen").classList.add("hidden");
-    $("log").innerHTML = "";
-    window.Engine.newGame();
+    showIntro(); // 先播开场剧情，点「推门而入」再真正开局
   }
 
   return { log, renderAll, enterBattle, renderSetup, startGame };
