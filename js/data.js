@@ -201,8 +201,6 @@ GAME_DATA.monsters = {
              move: { steps: 1 }, coinDrop: 0, tags: ["boss", "aggressive"],
              defend: { rule: "always", stance: "defend" },
              growth: { everyRounds: 2, atk: 1, def: 1, everyRoundsHp: 5, hpGain: 5, heal: 5 },
-             phase: { threshold: 0.5, effect: "skillEveryRound" },
-             skill: { name: "湮灭波", cooldown: 2, desc: "发起战斗时，无视你战斗牌加成中的2点", effect: "ignoreCardBonus", value: 2 },
              diffStats: {
                hard:      { hpMax: 45, attack: 4, defense: 3 },
                nightmare: { hpMax: 66, attack: 5, defense: 4 },
