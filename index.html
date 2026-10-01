@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>魔法少女派对 - MVP 骨架</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="start-screen">
+  <h1>魔法少女派对</h1>
+  <div id="win-record" class="win-record"></div>
+  <div class="setup-sec">
+    <h2>选择角色</h2>
+    <div id="char-list" class="setup-list"></div>
+  </div>
+  <div class="setup-sec">
+    <h2>选择地图</h2>
+    <div id="map-list" class="setup-list"></div>
+  </div>
+  <div class="setup-sec">
+    <h2>难度</h2>
+    <div id="diff-list" class="setup-list"></div>
+  </div>
+  <button id="btn-start" class="primary">开始游戏</button>
+  <button id="btn-help">玩法介绍</button>
+</div>
+
+<div id="help-screen" class="hidden">
+  <div id="help-body">
+    <h1>玩法介绍</h1>
+    <div class="help-sec"><h2>目标</h2>
+      <p>在限定轮数内击败隐藏于地图中的最终 BOSS 即获胜；轮数耗尽则失败。</p>
+    </div>
+    <div class="help-sec"><h2>每轮怎么走</h2>
+      <p>出牌阶段用效果牌 → 掷骰沿道路移动 → 途经地块触发效果（商店、拿牌、回血/掉血、刷怪等）→ 怪物依次行动。</p>
+      <p>移动不能掉头；岔路口点击高亮地块选方向。地块上有怪物时会先询问是否交战，打完（或避战）才结算地块效果。</p>
+    </div>
+    <div class="help-sec"><h2>战斗</h2>
+      <p>你有「战斗点数」（3 + 星级），可打战斗牌加攻/防，然后双方各掷一颗骰子比大小，伤害保底 1 点。被怪攻击时选「防御」或「闪避」；会反击的怪被打后立刻还手。</p>
+    </div>
+    <div class="help-sec"><h2>卡牌与筹码</h2>
+      <p>手牌上限 8 张：战斗牌只在战斗中用，效果牌只在出牌阶段用。<b>筹码</b>是局内被动遗物，通过任务、升星、筹码商店 3 选 1 获得。</p>
+    </div>
+    <div class="help-sec"><h2>金币 / 星级 / 任务</h2>
+      <p>打怪、事件赚金币；在升级点花金币升星，变强并解锁更好的筹码概率。完成地图任务额外奖励筹码 3 选 1。</p>
+    </div>
+    <button id="btn-help-back" class="primary">返回</button>
+  </div>
+</div>
+
+<header id="hud">
+  <img id="hud-avatar" class="hud-avatar hidden" alt="角色头像">
+  <div class="stat">轮次 <b id="hud-round">-</b>/<span id="hud-rounds">-</span></div>
+  <div class="stat">❤ <b id="hud-hp">-</b></div>
+  <div class="stat">⭐ 星级 <b id="hud-star">-</b></div>
+  <div class="stat">◉ 金币 <b id="hud-coin">-</b></div>
+  <div class="stat">⚔ 攻 <b id="hud-atk">-</b></div>
+  <div class="stat">🛡 防 <b id="hud-def">-</b></div>
+  <div class="stat">技能 <b id="hud-skill">-</b></div>
+  <div class="stat">阶段 <b id="hud-phase">-</b></div>
+</header>
+
+<main>
+  <section id="board-wrap">
+    <aside id="map-side">
+      <div id="event-list" class="map-panel"></div>
+      <div id="quest-list" class="map-panel"></div>
+      <div id="map-legend" class="map-panel">
+        <div class="mp-head">🧭 地图图例</div>
+        <div class="lg-row"><span class="lg-arr lg-p"></span>黄箭头：我方下一步方向</div>
+        <div class="lg-row"><span class="lg-arr lg-m"></span>红箭头：怪物下一步方向</div>
+        <div class="lg-row"><span class="lg-arr lg-b"></span>紫箭头：BOSS 下一步方向</div>
+        <div class="lg-row"><span class="lg-arr lg-c"></span>虚线多箭头：岔路口，点击高亮地块前进</div>
+        <div class="lg-row lg-note">方向未知（怪物刚登场）时不画箭头；不能掉头。</div>
+      </div>
+    </aside>
+    <div id="board"></div>
+  </section>
+  <aside id="side">
+    <div id="info"></div>
+    <div id="shop-panel" class="hidden">
+      <h3>🏪 商店</h3>
+      <div id="shop-coins"></div>
+      <div id="shop-offers"></div>
+      <div id="shop-actions"></div>
+    </div>
+    <div id="chip-panel" class="hidden">
+      <h3 id="chip-title">🎴 筹码 3 选 1</h3>
+      <div id="chip-options"></div>
+      <div id="chip-actions"></div>
+    </div>
+    <div id="battle-panel" class="hidden">
+      <h3 id="battle-title"></h3>
+      <div id="battle-art">
+        <figure class="art-slot"><img id="battle-art-player" alt="我方立绘"><figcaption>我方</figcaption></figure>
+        <span class="art-vs">VS</span>
+        <figure class="art-slot"><img id="battle-art-enemy" alt="敌方立绘"><figcaption id="battle-art-enemy-name">敌方</figcaption></figure>
+      </div>
+      <div id="battle-info"></div>
+      <div id="battle-cards"></div>
+      <div id="battle-actions"></div>
+    </div>
+    <div id="turn-panel">
+      <div id="hand"></div>
+      <div id="actions"></div>
+    </div>
+    <div id="log"></div>
+  </aside>
+</main>
+
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,518 @@
+// 渲染层
+window.UI = (() => {
+  const $ = (id) => document.getElementById(id);
+
+  // 立绘装载：路径为空或加载失败时自动隐藏，不影响 UI 与测试
+  // URL 带 ?nocache 时给图片追加时间戳，换图后无需强刷（试玩调试用）
+  const NOCACHE = typeof location !== "undefined" && /[?&]nocache/.test(location.search || "");
+  function setArt(img, path) {
+    if (!img) return;
+    if (!path) { img.style.display = "none"; img.removeAttribute("src"); return; }
+    if (NOCACHE) path += (path.includes("?") ? "&" : "?") + "t=" + Date.now();
+    img.onerror = () => { img.style.display = "none"; };
+    img.onload = () => { img.style.display = ""; };
+    if (img.getAttribute("src") !== path) img.setAttribute("src", path);
+  }
+  const TILE_INFO = {
+    start:   { icon: "🚩", name: "起始" },  shop:   { icon: "🏪", name: "商店" },
+    dash:    { icon: "💨", name: "疾行" },  damage: { icon: "💥", name: "掉血" },
+    heal:    { icon: "💖", name: "回血" },  spawn:  { icon: "👾", name: "刷怪" },
+    assault: { icon: "⚔", name: "突击" },  upgrade:{ icon: "⭐", name: "升级" },
+    event:   { icon: "❓", name: "事件" },  draw:   { icon: "🃏", name: "拿牌" },
+    boss:    { icon: "💀", name: "BOSS" },  chipshop:{ icon: "🎰", name: "筹码店" },
+  };
+
+  function log(msg, cls) {
+    const el = $("log");
+    const div = document.createElement("div");
+    if (cls) div.className = cls;
+    div.textContent = msg;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function renderAll() {
+    const S = Engine.state;
+    if (!S) return;
+    const P = S.player;
+    $("hud-round").textContent = S.round;
+    $("hud-rounds").textContent = S.roundsLimit ?? window.GAME_DATA.map.rounds;
+    $("hud-hp").textContent = `${P.hp}/${P.hpMax}`;
+    $("hud-star").textContent = P.star;
+    $("hud-coin").textContent = P.coins;
+    const dv = Engine.derived ? Engine.derived() : { atk: P.atk, def: P.def };
+    $("hud-atk").textContent = dv.atk + (P.atkBuffNextBattle ? `（+${P.atkBuffNextBattle}）` : "");
+    $("hud-def").textContent = dv.def;
+    $("hud-skill").textContent = P.skillCd > 0 ? `冷却${P.skillCd}` : "就绪";
+    $("hud-phase").textContent = S.over ? "终局" : ({ play: "出牌阶段", move: "移动阶段", battle: "战斗", turnEnd: "AI回合", idle: "-" })[S.phase] || "-";
+    setArt($("hud-avatar"), window.GAME_DATA.player?.art?.full);
+
+    // 面板可见性统一由战斗/商店/筹码状态驱动
+    $("battle-panel").classList.toggle("hidden", !S.battle);
+    $("shop-panel").classList.toggle("hidden", !S.shop);
+    $("chip-panel").classList.toggle("hidden", !S.chipChoice);
+    $("turn-panel").classList.toggle("hidden", !!S.battle || !!S.shop || !!S.chipChoice);
+    if (S.shop) renderShop(S);
+    if (S.chipChoice) renderChipChoice(S);
+    if (S.battle) enterBattle();
+
+    renderInfo(S); renderMapSide(S);
+    renderBoard(S); renderHand(S); renderActions(S);
+  }
+
+  // 棋盘左侧栏：事件日程与地图任务（与怪物信息分离，避免信息面板过长）
+  function renderMapSide(S) {
+    const D = window.GAME_DATA;
+    const evEl = $("event-list"), qEl = $("quest-list");
+    if (!evEl || !qEl) return;
+    const evs = D.map?.globalEvents || [];
+    evEl.classList.toggle("hidden", !evs.length);
+    evEl.innerHTML = evs.length ? `<div class="mp-head">🗓 事件日程</div>` + evs.map(e => {
+      const state = S.round > e.round ? "（已触发）" : S.round === e.round ? "｜<span class='warn'>本轮触发！</span>" : "";
+      const cls = S.round > e.round ? "ev-row past" : S.round === e.round ? "ev-row now" : "ev-row";
+      return `<div class="${cls}">第 ${e.round} 轮${e.name ? `【${e.name}】` : ""}：${e.desc}${state}</div>`;
+    }).join("") + (() => {
+      const b = S.globalBonus || {};
+      if (!b.atk && !b.def) return "";
+      return `<div class="ev-row now">当前全局强化：所有敌人 攻 +${b.atk} 防 +${b.def}（含此后刷出的敌人）</div>`;
+    })() : "";
+    const qs = S.quests || [];
+    qEl.classList.toggle("hidden", !qs.length);
+    qEl.innerHTML = qs.length ? `<div class="mp-head">📋 地图任务</div>` + qs.map(q =>
+      `<div class="q-row${q.done ? " done" : ""}">【${q.desc}】<b>${q.progress}/${q.need}</b>${q.done ? "｜<span class='good'>已完成</span>" : ""}` +
+      `<br><span class="q-reward">奖励：${q.rewardTier} 级概率筹码${q.extra === "roundProgressMinus1" ? "，轮次进度 -1" : ""}</span></div>`
+    ).join("") : "";
+  }
+
+  function renderShop(S) {
+    const shop = S.shop;
+    $("shop-coins").innerHTML = `当前金币：<b>${S.player.coins}</b>｜每张卡售价见卡片（手牌上限 8）`;
+    const offers = $("shop-offers");
+    offers.innerHTML = "";
+    shop.offers.forEach((o, i) => {
+      const el = document.createElement("label");
+      el.className = "shop-item";
+      const c = o.card;
+      el.innerHTML = `<input type="checkbox" data-idx="${i}" ${o.sold ? "disabled" : ""}>` +
+        `<span class="card ${c.type}${o.sold ? " disabled" : ""}"><b>${c.name}</b>${c.type === "battle" ? `<span class="cost">战斗牌</span>` : "<span class='cost'>效果牌</span>"}${c.desc}</span>` +
+        `<span class="price">${o.sold ? "已售出" : `◉ ${o.cost}`}</span>`;
+      offers.appendChild(el);
+    });
+    const act = $("shop-actions");
+    act.innerHTML = "";
+    addButton(act, "🛒 购买勾选", () => {
+      const sel = [...$("shop-offers").querySelectorAll("input:checked")].map(x => +x.dataset.idx);
+      Engine.buyShop(sel);
+    });
+    addButton(act, "离开商店", () => Engine.closeShop(), "primary");
+  }
+
+  const RARITY_CN = { blue: "蓝", purple: "紫", gold: "金" };
+
+  function renderChipChoice(S) {
+    const wrap = $("chip-options");
+    wrap.innerHTML = "";
+    S.chipChoice.options.forEach((id, i) => {
+      const c = window.GAME_DATA.chips[id];
+      if (!c) return;
+      const el = document.createElement("div");
+      el.className = `card chip rarity-${c.rarity} selectable`;
+      el.innerHTML = `<b>${c.name}</b><span class="cost">${c.school}·${RARITY_CN[c.rarity]}</span>${c.desc}`;
+      el.onclick = () => Engine.pickChip(i);
+      wrap.appendChild(el);
+    });
+    const left = S.chipRefreshLeft || 0;
+    $("chip-title").textContent = `🎴 筹码 3 选 1（剩余刷新 ${left} 次）`;
+    const act = $("chip-actions");
+    act.innerHTML = "";
+    addButton(act, `🔄 刷新（剩 ${left} 次）`, () => Engine.refreshChips(), "", left <= 0);
+  }
+
+  const TAG_CN = { passive: "不主动攻击", aggressive: "主动攻击", canDodge: "会闪避", usesSkill: "使用技能", boss: "BOSS", counter: "会反击" };
+  const STANCE_CN = { defend: "防御", dodge: "闪避" };
+
+  const tileNameAt = (S, pos) => TILE_INFO[S.tiles[pos].t].name;
+
+  function renderInfo(S) {
+    const D = window.GAME_DATA, P = D.player;
+    const el = $("info");
+    if (!el) return;
+    const cd = S.player.skillCd;
+    let html = `<div class="info-sec"><b>我的技能</b>（难度：${D.difficulties?.[D.diff] || "普通"}）<br>` +
+      `移动去向：${(() => { const p = Engine.peekPlayerNext(); return p != null ? `下一步 → ${tileNameAt(S, p)}` : "前方岔路，移动时选择"; })()}<br>` +
+      `财富层数 ${S.player.wealth}｜再生层数 ${S.player.regen}` +
+      ((() => { const per = (S.player.chips || []).reduce((n, id) => n + (D.chips[id]?.regenStacks || 0), 0); return per ? `（每回合开始时 +${per}）` : ""; })()) +
+      `<br>主动【${P.activeSkill.name}】（CD${P.activeSkill.cooldown}）：${P.activeSkill.desc} ${cd > 0 ? `｜冷却中：${cd} 轮` : "｜<span class='good'>就绪</span>"}` +
+      `<br>被动【${P.passiveSkill.name}】：${P.passiveSkill.desc}` +
+      (S.player.buffs.length ? `<br>当前效果：${S.player.buffs.map(b =>
+        `【${b.name}】${b.atk ? `攻+${b.atk}` : ""}${b.dmgTaken ? "（受伤+1）" : ""}${b.heal ? "（回合开始回血）" : ""}`).join(" ")}` : "") +
+      `</div>`;
+    const chips = S.player.chips || [];
+    html += `<div class="info-sec"><b>我的筹码（${chips.length}）</b><br>` +
+      (chips.length ? chips.map(id => {
+        const c = window.GAME_DATA.chips[id];
+        return `<span class="chip-tag rarity-${c.rarity}">${c.name}</span>`;
+      }).join(" ") : "暂无") + `</div>`;
+    html += `<div class="info-sec"><b>场上怪物（按登场顺序）</b>`;
+    const candIds = S.targeting ? S.targeting.candidates : null; // 瞄准中的候选：列表中同样可点击锁怪
+    const GD = window.GAME_DATA;
+    const RANK = { normal: 0, hard: 1, nightmare: 2, crazy: 3 };
+    const curRank = RANK[GD.diff] ?? 0;
+    S.monsters.forEach(m => {
+      const tags = m.def.tags.map(t => TAG_CN[t] || t).join("、") || "—";
+      const no = candIds ? candIds.indexOf(m.uid) + 1 : 0;
+      const pickable = no > 0 && m.hp > 0;
+      // 主动技能：名称 + 说明 + 冷却状态
+      const sk = m.def.skill;
+      const skLine = sk ? `<br><span class="mob-active">主动【${sk.name}】</span>${sk.desc || ""}` +
+        (sk.cooldown ? `（CD ${sk.cooldown} 轮）｜${m.skillCd > 0 ? `<span class="warn">冷却中：${m.skillCd}</span>` : "<span class='good'>就绪</span>"}` : "") : "";
+      // 被动技能：逐条列出；难度限定且当前难度不满足的被动直接不显示
+      const ps = (m.def.passives || []).filter(p => !p.minDiff || curRank >= RANK[p.minDiff]);
+      const psLine = ps.map(p =>
+        `<br><span class="mob-passive">被动【${p.name}】</span>${p.desc || ""}`).join("");
+      html += `<div class="info-mob${pickable ? " pickable" : ""}"${pickable ? ` data-uid="${m.uid}"` : ""}${candIds && !pickable ? ' style="opacity:.4"' : ""}>` +
+        (pickable ? `<span class="pick-idx">${no}</span>` : "") +
+        (m.def.art?.full ? `<img class="mob-avatar" src="${m.def.art.full}" alt="" onerror="this.style.display='none'">` : "") +
+        `<b>${m.name}</b>（${m.def.category === "boss" ? "BOSS" : m.def.category === "elite" ? "精英" : "小怪"}）HP ${m.hp}/${m.hpMax} 攻${m.atk} 防${m.def_}｜悬赏 ◉${m.def.coinDrop}` +
+        skLine + psLine + `<br>` +
+      `行为：${tags}｜守方倾向：${m.def.defend ? (m.def.defend.rule === "always" ? STANCE_CN[m.def.defend.stance] : "按状态切换") : "—"}｜反击：${m.def.tags.includes("counter") ? "会反击" : "不会反击"}<br>` +
+        `标记：${m.marks > 0 ? `${"▮".repeat(Math.min(m.marks, 5))}${m.marks} 层` : "无"}` +
+        (m.hunt > 0 ? `｜<span class="hunt">追猎 ${m.hunt} 层</span>` : "") + `<br>` +
+        (m.def.growth ? `成长：每 ${m.def.growth.everyRounds} 轮攻+${m.def.growth.atk} 防+${m.def.growth.def}｜每 ${m.def.growth.everyRoundsHp} 轮血上限+${m.def.growth.hpGain} 并回复 ${m.def.growth.heal}<br>` : "") +
+        `移动去向：${(() => {
+          const nx = Engine.peekNext(m);
+          if (nx == null) return m.def.tags.includes("aggressive") ? "下一步 → 朝你逼近（尽头处转向）" : "下一步 → 方向未定（随机/岔路）";
+          return `下一步 → ${tileNameAt(S, nx)}`;
+        })()}` +
+        `</div>`;
+    });
+    html += `</div>`;
+    el.innerHTML = html;
+    // 瞄准中的候选怪物：点击列表条目即锁定该怪物（与棋盘编号一致）
+    el.querySelectorAll(".info-mob.pickable").forEach(node => {
+      node.onclick = () => window.Engine.chooseTarget(+node.dataset.uid);
+    });
+  }
+
+  function renderBoard(S) {
+    const board = $("board");
+    const D = window.GAME_DATA;
+    // 平面 2D 拓扑：节点 = 地块，线段 = 连接（拓扑按地图配置，文档03 §1）
+    const n = S.tiles.length;
+    let pos;
+    if (S.tiles.some(t => t.x != null)) {
+      // 显式网格坐标：归一化缩放到 800×800 画布（保持等距，居中留边）
+      const xs = S.tiles.map(t => t.x ?? 0), ys = S.tiles.map(t => t.y ?? 0);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      const M = 70, W = 800;
+      const sc = Math.min((W - 2 * M) / Math.max(maxX - minX, 1), (W - 2 * M) / Math.max(maxY - minY, 1));
+      const ox = (W - sc * (maxX - minX)) / 2, oy = (W - sc * (maxY - minY)) / 2;
+      pos = S.tiles.map(t => ({ x: ox + ((t.x ?? 0) - minX) * sc, y: oy + ((t.y ?? 0) - minY) * sc }));
+    } else {
+      pos = S.tiles.map((t, i) => { const a = (i / n) * Math.PI * 2 - Math.PI / 2; return { x: 400 + 330 * Math.cos(a), y: 400 + 330 * Math.sin(a) }; });
+    }
+    const edges = D.map.edges || Array.from({ length: n }, (_, i) => [i, (i + 1) % n]);
+
+    let svg = `<svg viewBox="0 0 800 800" id="board-svg">`;
+    for (const [a, b] of edges) {
+      svg += `<line x1="${pos[a].x}" y1="${pos[a].y}" x2="${pos[b].x}" y2="${pos[b].y}" class="edge"/>`;
+    }
+    const awaitSet = S.move && S.move.who === "player" ? S.move.await : null;
+    S.tiles.forEach((tile, i) => {
+      const info = TILE_INFO[tile.t];
+      const p = pos[i];
+      const mobs = S.monsters.filter(m => m.pos === i);
+      const isPlayer = S.player.pos === i;
+      svg += `<g class="node${isPlayer ? " node-player" : ""}${mobs.length ? " node-mob" : ""}">`;
+      svg += `<circle cx="${p.x}" cy="${p.y}" r="34" class="tile-circle tile-${tile.t}"/>`;
+      if (S.flames && S.flames[i]) { // 青鸾雏焰：青焰环绕的地块（虚焰环 + 火焰角标）
+        svg += `<circle cx="${p.x}" cy="${p.y}" r="39" class="tile-flame-ring"/>`;
+        svg += `<text x="${p.x + 26}" y="${p.y - 22}" class="tile-icon" text-anchor="middle">🔥</text>`;
+      }
+      svg += `<text x="${p.x}" y="${p.y - 8}" class="tile-icon" text-anchor="middle">${info.icon}</text>`;
+      svg += `<text x="${p.x}" y="${p.y + 12}" class="tile-name" text-anchor="middle">${info.name}</text>`;
+      let ty = p.y + 26;
+      if (isPlayer) { svg += `<text x="${p.x}" y="${ty}" class="token-p" text-anchor="middle">★我</text>`; ty += 13; }
+      // 同格多怪：最多列 3 行，其余折叠为「+N」，避免文字压到相邻地块上
+      const shown = mobs.slice(0, 3);
+      shown.forEach(m => {
+        const cls = m.def.category === "boss" ? "token-boss" : "token-m";
+        const label = m.def.category === "boss" ? `💀${m.name} ${m.hp}/${m.hpMax}` : `${m.name} ${m.hp}/${m.hpMax}`;
+        svg += `<text x="${p.x}" y="${ty}" class="${cls}" text-anchor="middle">${label}</text>`;
+        ty += 13;
+      });
+      if (mobs.length > shown.length) {
+        svg += `<text x="${p.x}" y="${ty}" class="token-more" text-anchor="middle">…还有 ${mobs.length - shown.length} 只</text>`;
+      }
+      if (awaitSet && awaitSet.includes(i)) { // 岔路待选项：可点击高亮
+        svg += `<g class="move-choice" data-pos="${i}" style="cursor:pointer">` +
+          `<circle cx="${p.x}" cy="${p.y}" r="40" class="move-ring"/>` +
+          `<circle cx="${p.x}" cy="${p.y}" r="44" fill="transparent"/></g>`;
+      }
+      svg += `</g>`;
+    });
+    // 移动方向箭头：黄=我方、红=怪物、紫=BOSS、虚线=岔路候选（点击选择）
+    // 只在方向确定时显示，方向未知（登场随机）不预告，避免与真实走向不一致造成误读
+    const arrow = (cur, next, t, cls, off = 0) => {
+      const a = pos[cur], b = pos[next];
+      const x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t;
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const ox = -((b.y - a.y) / len) * off, oy = ((b.x - a.x) / len) * off;
+      const ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+      return `<g transform="translate(${x + ox},${y + oy}) rotate(${ang})"><path d="M 8 0 L -5 -6 L -2 0 L -5 6 Z" class="${cls}"/></g>`;
+    };
+    if (!S.over) {
+      const mv = (S.move && S.move.who === "player") ? S.move : null;
+      const pOpts = Engine.peekPlayerOptions();
+      if (pOpts.length === 1) {
+        svg += arrow(S.player.pos, pOpts[0], 0.5, "arr-p");
+      } else {
+        // 岔路待选：每个候选方向画一枚虚线箭头，横向错开便于分辨
+        pOpts.forEach((n, i) => {
+          svg += arrow(S.player.pos, n, 0.5, "arr-p arr-choice", (i - (pOpts.length - 1) / 2) * 14);
+        });
+      }
+      let mi = 0;
+      S.monsters.forEach(m => {
+        if (m.hp <= 0) return;
+        const n = Engine.peekNext(m);
+        if (n == null) return;
+        const cls = m.def.category === "boss" ? "arr-boss" : "arr-m";
+        svg += arrow(m.pos, n, 0.66, cls, (mi++ % 3) * 7);
+      });
+      // 瞄准模式：候选怪物按「目标编号」逐个标出（同格多怪水平排开，避免标记重叠、便于精确锁怪）
+      if (S.targeting) {
+        const candIds = S.targeting.candidates;
+        const cand = S.monsters.filter(m => candIds.includes(m.uid) && m.hp > 0);
+        const byTile = {};
+        cand.forEach(m => { (byTile[m.pos] = byTile[m.pos] || []).push(m); });
+        Object.keys(byTile).forEach(k => {
+          const p = pos[+k], list = byTile[k];
+          list.forEach((m, i) => {
+            const dx = (i - (list.length - 1) / 2) * 52;
+            const cx = p.x + dx, cy = p.y - 62;
+            const no = candIds.indexOf(m.uid) + 1;
+            svg += `<g class="target-hit" data-uid="${m.uid}" style="cursor:pointer">` +
+              `<line x1="${cx}" y1="${cy + 18}" x2="${p.x}" y2="${p.y - 26}" class="target-lead"/>` +
+              `<circle cx="${cx}" cy="${cy}" r="19" class="target-ring"/>` +
+              `<text x="${cx}" y="${cy + 6}" class="target-idx" text-anchor="middle">${no}</text></g>`;
+          });
+        });
+      }
+    }
+    svg += `</svg>`;
+    board.innerHTML = svg;
+    board.querySelectorAll(".move-choice").forEach(el => {
+      el.onclick = () => Engine.pickMoveStep(+el.dataset.pos);
+    });
+    if (S.targeting) board.querySelectorAll(".target-hit").forEach(el => {
+      el.onclick = () => Engine.chooseTarget(+el.dataset.uid);
+    });
+  }
+
+  function renderHand(S) {
+    const hand = $("hand");
+    hand.innerHTML = "";
+    const inPlay = S.phase === "play";
+    S.player.hand.forEach((c, i) => {
+      const el = document.createElement("div");
+      el.className = `card ${c.type}` + (inPlay && c.type === "effect" ? " selectable" : "");
+      el.innerHTML = `<b>${c.name}</b>${c.type === "battle" ? `<span class="cost">耗${c.cost}点</span>` : ""}${c.desc}`;
+      if (inPlay && c.type === "effect") el.onclick = () => Engine.playCard(i);
+      hand.appendChild(el);
+    });
+  }
+
+  function renderActions(S) {
+    const act = $("actions");
+    act.innerHTML = "";
+    if (S.over) { addButton(act, "重新开始", () => { $("log").innerHTML = ""; Engine.newGame(); }, "primary"); return; }
+    if (S.phase === "play") {
+      if (S.targeting) {
+        addButton(act, `🎯 瞄准中：${S.targeting.cardName}（点棋盘编号标记或右侧怪物条目锁怪）`, () => {}, "", true);
+        addButton(act, "取消瞄准", () => Engine.cancelTargeting(), "primary");
+        return;
+      }
+      const ready = S.player.skillCd === 0;
+      addButton(act, `主动技能${ready ? "" : `（冷却${S.player.skillCd}）`}`, () => Engine.useSkill(), "", !ready);
+      addButton(act, "结束出牌阶段 →", () => Engine.finishPlayPhase(), "primary");
+    } else if (S.phase === "move") {
+      if (S.targeting) {
+        addButton(act, `🎯 ${S.targeting.cardName}：点棋盘编号标记或右侧怪物条目锁怪`, () => {}, "", true);
+        addButton(act, "取消选择", () => Engine.cancelTargeting(), "primary");
+        return;
+      }
+      const mv = S.move && S.move.who === "player" ? S.move : null;
+      if (mv && mv.await) {
+        // 岔路待选：提示剩余步数与可选方向数，点击棋盘高亮地块续走
+        const hint = document.createElement("div");
+        hint.className = "hint-row";
+        hint.textContent = `🛤 请选择前进方向：剩余 ${mv.steps} 步，可选 ${mv.await.length} 个方向（不能掉头）`;
+        act.appendChild(hint);
+        return;
+      }
+      addButton(act, "🎲 掷骰移动", () => Engine.rollAndMove(), "primary");
+    }
+  }
+
+  // ---------- 战斗面板 ----------
+  function enterBattle() {
+    const S = Engine.state, b = S.battle;
+    if (!b) return; // 可见性由 renderAll 统一处理
+    $("battle-title").textContent = b.mode === "playerAttack" ? `战斗：对【${b.target.name}】` : `战斗：【${b.target.name}】${b.counter ? "反击你！" : "攻击你！"}`;
+    setArt($("battle-art-player"), window.GAME_DATA.player?.art?.full);
+    setArt($("battle-art-enemy"), b.target?.def?.art?.full);
+    $("battle-art-enemy-name").textContent = b.target?.name || "敌方";
+    $("battle-info").innerHTML = "";
+    const cardsEl = $("battle-cards"), actEl = $("battle-actions");
+    cardsEl.innerHTML = "";
+    actEl.innerHTML = "";
+
+    if (b.mode === "playerAttack") {
+      const t = b.target;
+      const dv = Engine.derived();
+      const apv = Engine.attackPreview ? Engine.attackPreview(t) : { total: dv.atk, parts: [] };
+      const STANCE_CN_UI = { defend: "防御", dodge: "闪避" };
+      $("battle-title").textContent = `战斗：对【${t.name}】`;
+      $("battle-info").innerHTML =
+        `<b>我方</b>攻击 <b>${apv.total}</b>${b.cardBonus ? "+" + b.cardBonus : ""}${apv.parts.length ? `（${apv.parts.join("，")}）` : ""}｜战斗点数 <b>${Engine.playerBattlePoints() - b.spentPoints}</b>（已用 ${b.spentPoints}）<br>` +
+        `<b>敌方</b>【${t.name}】HP <b>${t.hp}/${t.hpMax}</b>｜攻 <b>${t.atk}</b>｜防 <b>${t.def_}</b>｜姿态 <b>${STANCE_CN_UI[apv.stance] || "防御"}</b>${t.marks ? `｜标记 ${t.marks} 层（我方伤害 +${t.marks}）` : ""}<br>` +
+        `结算：我方 ${apv.total}${b.cardBonus ? "+" + b.cardBonus : ""} + 我方骰 vs 敌方 ${t.def_} + 敌方骰，伤害保底 1${apv.stance === "dodge" ? "；敌方闪避姿态时改比骰点（我方骰 ≥ 敌方骰则它不受伤）" : ""}`;
+      const pts = Engine.playerBattlePoints() - b.spentPoints;
+      S.player.hand.filter(c => c.type === "battle" && c.kind === "atk").forEach(c => {
+        const el = document.createElement("div");
+        const can = c.cost <= pts;
+        el.className = "card battle" + (can ? " selectable" : " disabled");
+        el.innerHTML = `<b>${c.name}</b><span class="cost">耗${c.cost}点</span>${c.desc}`;
+        if (can) el.onclick = () => Engine.playerPlayBattleCard(c.id);
+        cardsEl.appendChild(el);
+      });
+      addButton(actEl, "⚔ 结算攻击", () => Engine.resolvePlayerAttack(), "primary");
+    } else {
+      const t = b.target, dv = Engine.derived();
+      const dpv = Engine.defensePreview ? Engine.defensePreview(t) : null;
+      const stanceTxt = dpv ? (dpv.stance === "dodge" ? "闪避" : "防御") : "防御";
+      $("battle-title").textContent = `战斗：【${t.name}】${b.counter ? "反击你！" : "攻击你！"}`;
+      $("battle-info").innerHTML =
+        `<b>我方</b>生命 <b>${S.player.hp}/${S.player.hpMax}</b>｜防御 <b>${dpv ? dpv.myDef : dv.def}</b>` +
+        (dpv && dpv.defBonus ? `（基础 ${dpv.baseDef} + 防御牌 ${dpv.defBonus}）` : "") + `<br>` +
+        `<b>敌方</b>【${t.name}】攻击 <b>${dpv ? dpv.enemyAtk : t.atk}</b>` +
+        (dpv && dpv.enemyAtkBonus ? `（基础 ${dpv.enemyBaseAtk} + 加成 ${dpv.enemyAtkBonus}）` : "") +
+        (dpv && dpv.enemyDiceBonus ? `｜骰点 +${dpv.enemyDiceBonus}` : "") +
+        `｜姿态 ${stanceTxt}<br>` +
+        `结算方式：<b>防御</b>＝敌方攻+敌骰 −（我方防+我骰），伤害保底 1；<b>闪避</b>＝只比骰点，我方骰 ≥ 敌方骰即不受伤（失败则防御按 0 算）<br>` +
+        `先打防御牌可提升我方防御，姿态确定后才掷骰。`;
+      const pts = Engine.playerBattlePoints() - b.spentPoints;
+      S.player.hand.filter(c => c.type === "battle" && c.kind === "def").forEach(c => {
+        const el = document.createElement("div");
+        const can = c.cost <= pts;
+        el.className = "card battle" + (can ? " selectable" : " disabled");
+        el.innerHTML = `<b>${c.name}</b><span class="cost">耗${c.cost}点</span>${c.desc}`;
+        if (can) el.onclick = () => Engine.playerPlayBattleCard(c.id);
+        cardsEl.appendChild(el);
+      });
+      addButton(actEl, "🛡 防御", () => Engine.playerChooseStance("defend"));
+      addButton(actEl, "💨 闪避", () => Engine.playerChooseStance("dodge"), "primary");
+    }
+  }
+
+  function addButton(parent, text, onclick, cls = "", disabled = false) {
+    const b = document.createElement("button");
+    b.textContent = text;
+    if (cls) b.className = cls;
+    b.disabled = disabled;
+    b.onclick = onclick;
+    parent.appendChild(b);
+  }
+
+  // ---------- 开场选择界面 ----------
+  function renderSetup() {
+    const D = window.GAME_DATA;
+    renderWinRecord();
+    window.__setup = {
+      char: Object.keys(D.characters)[0],
+      map: (Object.values(D.maps).find(m => !m.hidden) || Object.values(D.maps)[0]).id,
+      diff: "normal",
+    };
+    // 角色卡
+    const cl = $("char-list");
+    cl.innerHTML = "";
+    Object.values(D.characters).forEach(c => {
+      const el = document.createElement("div");
+      el.className = "setup-card" + (c.id === window.__setup.char ? " selected" : "");
+      el.innerHTML = (c.art?.full ? `<img class="setup-art" src="${c.art.full}" alt="" onerror="this.style.display='none'">` : "") +
+        `<b>${c.name}</b>` +
+        `<span class="setup-stat">HP ${c.hpMax}｜攻 ${c.attack}｜防 ${c.defense}｜金币 ${c.initialCoins}</span>` +
+        `<span class="setup-skill">主动【${c.activeSkill.name}】（CD${c.activeSkill.cooldown}）：${c.activeSkill.desc}</span>` +
+        `<span class="setup-skill">被动【${c.passiveSkill.name}】：${c.passiveSkill.desc}</span>`;
+      el.onclick = () => {
+        window.__setup.char = c.id;
+        [...cl.children].forEach(x => x.classList.remove("selected"));
+        el.classList.add("selected");
+      };
+      cl.appendChild(el);
+    });
+    // 地图卡：hidden 的地图（测试用）不出现在选关列表
+    const ml = $("map-list");
+    ml.innerHTML = "";
+    Object.values(D.maps).filter(m => !m.hidden).forEach(m => {
+      const el = document.createElement("div");
+      el.className = "setup-card" + (m.id === window.__setup.map ? " selected" : "");
+      el.innerHTML = `<b>${m.name}</b>` +
+        `<span class="setup-stat">${m.rounds} 轮｜${m.tiles.length} 格｜任务 ${m.quests?.length || 0} 个</span>`;
+      el.onclick = () => {
+        window.__setup.map = m.id;
+        [...ml.children].forEach(x => x.classList.remove("selected"));
+        el.classList.add("selected");
+      };
+      ml.appendChild(el);
+    });
+    // 难度选择
+    const dl = $("diff-list");
+    dl.innerHTML = "";
+    Object.entries(D.difficulties).forEach(([id, name]) => {
+      const el = document.createElement("div");
+      el.className = "diff-btn" + (id === window.__setup.diff ? " selected" : "");
+      el.textContent = name;
+      el.onclick = () => {
+        window.__setup.diff = id;
+        [...dl.children].forEach(x => x.classList.remove("selected"));
+        el.classList.add("selected");
+      };
+      dl.appendChild(el);
+    });
+    $("btn-start").onclick = startGame;
+    // 玩法介绍页：进入/返回（遮罩互斥显示）
+    $("btn-help").onclick = () => {
+      $("start-screen").classList.add("hidden");
+      $("help-screen").classList.remove("hidden");
+    };
+    $("btn-help-back").onclick = () => {
+      $("help-screen").classList.add("hidden");
+      $("start-screen").classList.remove("hidden");
+    };
+  }
+
+  // 开场界面的胜利场次展示（读取 localStorage，与引擎记录键一致）
+  function renderWinRecord() {
+    const el = $("win-record");
+    if (!el) return;
+    let n = 0;
+    try { n = +localStorage.getItem("maidparty_wins") || 0; } catch (e) { /* 不可用：按 0 处理 */ }
+    el.textContent = n > 0 ? `🏆 累计胜利 ${n} 场` : "尚无胜利记录，祝你首胜顺利";
+  }
+
+  function startGame() {
+    const D = window.GAME_DATA, sel = window.__setup;
+    if (!sel) return;
+    D.player = D.characters[sel.char];
+    D.map = D.maps[sel.map];
+    D.diff = sel.diff || "normal";
+    $("start-screen").classList.add("hidden");
+    $("log").innerHTML = "";
+    window.Engine.newGame();
+  }
+
+  return { log, renderAll, enterBattle, renderSetup, startGame };
+})();
