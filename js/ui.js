@@ -51,9 +51,14 @@ window.UI = (() => {
     $("battle-panel").classList.toggle("hidden", !S.battle);
     $("shop-panel").classList.toggle("hidden", !S.shop);
     $("chip-panel").classList.toggle("hidden", !S.chipChoice);
+    const askOn = !!S.ask;
+    $("ask-panel").classList.toggle("hidden", !askOn);
+    // 询问期间不隐藏 #turn-panel：玩家需要一边看手牌/信息一边决定（此时出牌已被 S.ask 拦住）
     $("turn-panel").classList.toggle("hidden", !!S.battle || !!S.shop || !!S.chipChoice);
     if (S.shop) renderShop(S);
     if (S.chipChoice) renderChipChoice(S);
+    if (askOn) renderAsk(S);
+    else $("ask-actions").innerHTML = ""; // 隐藏时清空选项，避免按钮残留在 DOM 中
     if (S.battle) enterBattle();
 
     renderInfo(S); renderMapSide(S);
@@ -108,6 +113,24 @@ window.UI = (() => {
   }
 
   const RARITY_CN = { blue: "蓝", purple: "紫", gold: "金" };
+
+  // 询问面板（替代原生 confirm / prompt）：非模态渲染，页面其余部分照常可交互
+  function renderAsk(S) {
+    const a = S.ask;
+    $("ask-question").textContent = a.question;
+    const detail = $("ask-detail");
+    detail.textContent = a.detail || "";
+    detail.classList.toggle("hidden", !a.detail);
+    const act = $("ask-actions");
+    act.innerHTML = "";
+    a.options.forEach(o => {
+      const b = document.createElement("button");
+      b.textContent = o.label;
+      if (o.cls) b.className = o.cls;
+      b.onclick = () => Engine.answerAsk(o.value);
+      act.appendChild(b);
+    });
+  }
 
   function renderChipChoice(S) {
     const wrap = $("chip-options");

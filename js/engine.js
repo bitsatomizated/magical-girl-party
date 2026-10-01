@@ -114,7 +114,7 @@ window.Engine = (() => {
   async function openChipShop() {
     const price = chipShopPrice();
     if (S.player.coins < price) { log(`筹码商店：购买需要 ${price} 金币（金币不足）。`, "warn"); return; }
-    if (!confirm(`筹码商店：花费 ${price} 金币抽取一次筹码 3 选 1？`)) return;
+    if (!(await askYesNo(`筹码商店：花费 ${price} 金币抽取一次筹码 3 选 1？`, `花 ${price} 金币抽取`, "先不抽"))) return;
     S.player.coins -= price;
     S.chipPurchases = (S.chipPurchases || 0) + 1;
     log(`筹码商店：支付 ${price} 金币（下次购买 ${chipShopPrice()} 金币）。`);
@@ -136,7 +136,7 @@ window.Engine = (() => {
   function newGame() {
     const p = D.player, m = D.map;
     S = {
-      round: 1, phase: "idle", over: false,
+      round: 1, phase: "idle", over: false, ask: null, // ask：待玩家回答的询问（由非模态面板渲染）
       tiles: m.tiles.map(t => ({ ...t, monsters: [] })),
       // 道路拓扑：edges 缺省时按单环生成（环道 = 图的特例）；S.adj 为邻接表
       // 移动通则：初始方向固定（优先顺时针邻格），途中禁止掉头；岔路在非来路选项中选择
@@ -431,9 +431,9 @@ window.Engine = (() => {
     if (!S.flames[pos]) { S.flames[pos] = flameDamage(); log(`青焰环绕了第 ${pos} 格。`); }
   }
 
-  // 出牌阶段：效果牌
-  function playCard(idx) {
-    if (S.phase !== "play" || S.targeting || S.chipChoice) return false;
+  // 出牌阶段：效果牌（async：遥控骰子需要等玩家在面板上选点数）
+  async function playCard(idx) {
+    if (S.phase !== "play" || S.targeting || S.chipChoice || S.ask) return false;
     const c = S.player.hand[idx];
     if (!c) return false;
     const P = S.player;
@@ -450,8 +450,9 @@ window.Engine = (() => {
       if (c.doubleDice) { P.nextDouble = true; log(`【${c.name}】下次移动掷两个骰子。`); }
       else if (c.chooseDir) { P.nextChooseDir = true; log(`【${c.name}】下次移动自选方向。`); }
       else if (c.fixedDice) {
-        const ans = parseInt(prompt("遥控骰子：选择 1~6 的数字（下次移动固定该点数）", "6"), 10);
-        P.nextFixed = Math.min(6, Math.max(1, isNaN(ans) ? 6 : ans));
+        const ans = await ask("遥控骰子：选择下次移动固定的点数",
+          [1, 2, 3, 4, 5, 6].map(n => ({ label: String(n), value: n })));
+        P.nextFixed = Math.min(6, Math.max(1, Number(ans) || 6));
         log(`【${c.name}】下次移动固定 ${P.nextFixed} 点。`);
       }
     } else if (c.kind === "buff") {
@@ -620,6 +621,36 @@ window.Engine = (() => {
   const TILE_CN = { start: "起始点", upgrade: "升级点", chipshop: "筹码商店" };
   const CAN_STOP = ["start", "upgrade"];
 
+  // ---------- 玩家询问（替代原生 confirm / prompt）----------
+  // 原生弹窗是模态的：它阻塞整个页面，玩家无法在决定前滚动信息栏查看怪物、手牌与筹码。
+  // 这里把问题写入 S.ask，交给 UI 渲染成非模态面板，返回 Promise 等待玩家点击。
+  // 测试可用 window.__askAuto（同步返回所选 value）注入应答，从而不依赖 DOM。
+  function ask(question, options, detail) {
+    const auto = window.__askAuto;
+    if (typeof auto === "function") return Promise.resolve(auto(question, options, detail));
+    return new Promise((resolve) => {
+      S.ask = { question, options, detail, resolve };
+      window.UI.renderAll();
+    });
+  }
+
+  // UI 点击选项后回调：先清状态再 resolve，避免 Promise 回调重入时读到旧状态
+  function answerAsk(value) {
+    const a = S.ask;
+    if (!a) return;
+    S.ask = null;
+    window.UI.renderAll();
+    a.resolve(value);
+  }
+
+  // 是/否二选一的便捷封装
+  function askYesNo(question, yesLabel, noLabel, detail) {
+    return ask(question, [
+      { label: yesLabel || "确定", value: true, cls: "primary" },
+      { label: noLabel || "取消", value: false },
+    ], detail);
+  }
+
   // 路过可停留地块时的询问文案：升级点附带升星差价，便于判断是否值得停下
   function stopPrompt(t, steps) {
     const suffix = `（剩余 ${steps} 步将放弃）`;
@@ -667,7 +698,7 @@ window.Engine = (() => {
       if (S.over || S.battle) break;
       if (mv.steps === 0) break; // 已到目标格：落地结算在循环外
       const cur = S.tiles[S.player.pos];
-      if (CAN_STOP.includes(cur.t) && confirm(stopPrompt(cur.t, mv.steps))) {
+      if (CAN_STOP.includes(cur.t) && await askYesNo(stopPrompt(cur.t, mv.steps), "停留", "继续前进")) {
         mv.steps = 0;
         break;
       }
@@ -691,7 +722,7 @@ window.Engine = (() => {
       if (mv) mv.spawnDone = true;
       if (S.over || S.battle) return;
     }
-    if (offerTileFight("land")) return;
+    if (await offerTileFight("land")) return;
     if (tile.t === "shop") { drawCard(); log("停在商店：随机获得 1 张牌。", "good"); await openShop(); onPassShop(); }
     if (tile.t === "chipshop") await openChipShop();
     if (S.over || S.battle) return;
@@ -699,7 +730,7 @@ window.Engine = (() => {
     if (mv) mv.spawnDone = true; // 本地块已刷怪：战斗重入不得再次刷
     if (S.battle) return;
     if (S.over) { S.move = null; return; }
-    if (offerTileFight("land")) return; // 地块效果刚刷出的怪：同样按怪询问一次
+    if (await offerTileFight("land")) return; // 地块效果刚刷出的怪：同样按怪询问一次
     if (extra > 0 && mv) { // 疾行等加步效果：回到移动阶段继续走
       mv.spawnDone = false; // 续走后的新落地格重新结算效果
       S.phase = mv.who === "player" ? "move" : "turnEnd";
@@ -766,7 +797,7 @@ window.Engine = (() => {
   // 先处理地块上的怪物——**按怪逐个询问**是否交战，答应则与之战斗；返回 true 表示已开战
   // asked 记录本次结算中已询问过的怪物 uid：一次结算内同一只怪不重复询问（拒绝后可继续问同格其他怪），
   // 战斗结束重入结算时同样不会重复问；但每次进入新格都会清空（见移动循环），因此再次经过同一格会重新询问
-  function offerTileFight(pendingKind) {
+  async function offerTileFight(pendingKind) {
     const P = S.player, mv = S.move;
     if (S.over || P.ko) return false;
     const asked = mv ? (mv.asked = mv.asked || {}) : {};
@@ -774,7 +805,8 @@ window.Engine = (() => {
       const m = monstersAt(P.pos).filter(x => x.hp > 0).find(x => !asked[x.uid]);
       if (!m) return false; // 该地块上的怪物都询问过了
       asked[m.uid] = true;
-      if (!confirm(`是否与【${m.name}】交战？（HP ${m.hp}/${m.hpMax} 攻${m.atk} 防${m.def_}）`)) {
+      const detail = `HP ${m.hp}/${m.hpMax}　攻 ${m.atk}　防 ${m.def_}`;
+      if (!(await askYesNo(`是否与【${m.name}】交战？`, "交战", "避开", detail))) {
         log(`你选择避开【${m.name}】。`);
         continue; // 继续询问同地块的下一只怪
       }
@@ -786,7 +818,7 @@ window.Engine = (() => {
 
   async function resolvePassTile(tile) {
     // 先结算怪物（可拒绝），再结算地块效果
-    if (offerTileFight("pass")) return;
+    if (await offerTileFight("pass")) return;
     if (tile.t === "shop") { await openShop(); onPassShop(); }
     else if (tile.t === "chipshop") await openChipShop();
   }
@@ -1420,7 +1452,7 @@ window.Engine = (() => {
 
   // ================= 供 UI / 测试调用 =================
   return {
-    newGame, useSkill, playCard, finishPlayPhase, rollAndMove,
+    newGame, useSkill, playCard, finishPlayPhase, rollAndMove, answerAsk,
     playerBattlePoints, playBattleCard, playerPlayBattleCard: playBattleCard, resolvePlayerAttack, playerChooseStance,
     attackPreview, defensePreview, pickMoveStep, peekPlayerNext, peekPlayerOptions, peekNext, graphDist,
     buyShop, closeShop, pickChip, chipShopPrice, chooseTarget, cancelTargeting, refreshChips,

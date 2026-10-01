@@ -50,6 +50,16 @@ body { font-family: "Microsoft YaHei", sans-serif; background: #14141f; color: #
 #chip-tip .tip-meta { margin-left: 8px; color: #9a92b0; font-size: 11px; }
 #chip-tip .tip-desc { margin-top: 4px; color: #cfc8dd; }
 
+/* ---- 询问面板（替代原生 confirm/prompt）----
+   关键是非模态：面板出现时页面照常可交互，#info 仍可滚动，玩家能边看怪物/手牌/筹码边决定 */
+#ask-panel { background: #241c34; border: 1px solid #7a5ab0; border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 0 0 2px rgba(255, 215, 110, .12); }
+#ask-panel.hidden { display: none; }
+#ask-question { font-size: 14px; color: #ffd76e; line-height: 1.6; }
+#ask-detail { font-size: 13px; color: #c8c8dc; }
+#ask-detail.hidden { display: none; }
+#ask-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#ask-actions button { flex: 1 1 auto; min-width: 76px; }
+
 #hud { display: flex; gap: 18px; padding: 8px 16px; background: #1e1e2e; border-bottom: 1px solid #333; flex-wrap: wrap; }
 #hud .stat b { color: #ffd76e; }
 
