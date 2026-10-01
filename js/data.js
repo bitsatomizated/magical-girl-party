@@ -243,7 +243,6 @@ GAME_DATA.maps = {
   quests: [
     { desc: "击倒训练假人", target: "dummy",    need: 2, rewardTier: 1 },
     { desc: "击倒哨兵机兵", target: "sentinel", need: 1, rewardTier: 2 },
-    { desc: "击倒灾厄核心，完成出师试炼", target: "boss", need: 1, rewardTier: 3 },
   ],
   },
   // 岔路地图：单环 + 一条横穿捷径（3↔9），形成两处三岔口；检验图拓扑移动；hidden：仅供测试
