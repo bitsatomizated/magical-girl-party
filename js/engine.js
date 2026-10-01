@@ -697,12 +697,10 @@ window.Engine = (() => {
       if (ANIM) await delay(ANIM);
       if (S.over || S.battle) break;
       if (mv.steps === 0) break; // 已到目标格：落地结算在循环外
-      const cur = S.tiles[S.player.pos];
-      if (CAN_STOP.includes(cur.t) && await askYesNo(stopPrompt(cur.t, mv.steps), "停留", "继续前进")) {
-        mv.steps = 0;
-        break;
-      }
-      await resolvePassTile(cur);
+      // 路过结算：顺序为「先交战 → 再问是否停留 → 地块效果」，与落格结算保持一致
+      const r = await passThroughTile(S.tiles[S.player.pos]);
+      if (r === "battle") return;                 // 战斗中：由 endBattle 续接剩余步数
+      if (r === "stop") { mv.steps = 0; break; }  // 选择停留：转入落格结算
     }
     if (S.over) { S.move = null; return; }
     if (S.battle) return;                     // 战斗中：由 endBattle 续走剩余步数
@@ -816,11 +814,18 @@ window.Engine = (() => {
     }
   }
 
-  async function resolvePassTile(tile) {
-    // 先结算怪物（可拒绝），再结算地块效果
-    if (await offerTileFight("pass")) return;
+  // 路过一格的统一结算顺序：先按怪询问是否交战 → 再问是否在此停留 → 最后结算地块效果。
+  // 返回值："battle" 已开战（战斗结束后由 endBattle 重新进入本函数续接，已询问过的怪不会重复问）；
+  //         "stop"   玩家选择停留（调用方清零剩余步数并转入落格结算）；
+  //         "done"   本格处理完毕，可以继续走
+  async function passThroughTile(tile) {
+    if (await offerTileFight("pass")) return "battle";
+    const mv = S.move;
+    if (mv && mv.steps > 0 && CAN_STOP.includes(tile.t) &&
+        await askYesNo(stopPrompt(tile.t, mv.steps), "停留", "继续前进")) return "stop";
     if (tile.t === "shop") { await openShop(); onPassShop(); }
     else if (tile.t === "chipshop") await openChipShop();
+    return "done";
   }
 
   // 返回值：疾行追加步数；其余 0。async：升级后需等待筹码 3 选 1
@@ -1211,7 +1216,12 @@ window.Engine = (() => {
         settleLandTile();
       } else if (pend === "pass") {
         S.pendingTile = null;
-        resolvePassTile(S.tiles[S.player.pos]).then(() => { if (!S.battle && !S.over) continueMove(); });
+        // 战斗后重新处理本格：怪已询问过不会重复问，接着问是否停留并结算地块效果
+        passThroughTile(S.tiles[S.player.pos]).then((r) => {
+          if (S.battle || S.over) return;
+          if (r === "stop") { if (S.move) S.move.steps = 0; settleLandTile(); return; }
+          continueMove();
+        });
       } else {
         continueMove();
       }
