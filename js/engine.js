@@ -852,12 +852,46 @@ window.Engine = (() => {
     else log(`升级！当前 ${star} 星。`, "good");
   }
 
+  // 事件池（8 条，均匀随机各 12.5%）：条目与数值见设计文档 07 §8
+  // 事件扣血不走 playerTakesDamage：事件不是战斗伤害，不受战斗芯片（不屈/狂暴/缓冲）影响
   function randomEvent() {
-    const r = rnd(4);
-    if (r === 0) { S.player.coins += 5; log("事件：捡到 5 金币！", "good"); }
-    else if (r === 1) { S.player.coins = Math.max(0, S.player.coins - 3); log("事件：丢失 3 金币…", "warn"); }
-    else if (r === 2) { drawCard(); log("事件：获得 1 张卡牌。", "good"); }
-    else { spawnMonster("dummy", S.player.pos); log("事件：一只训练假人出现了！", "warn"); }
+    const P = S.player;
+    const r = rnd(8);
+    if (r === 0) { P.coins += 5; log("事件：捡到 5 金币！", "good"); }
+    else if (r === 1) { P.coins = Math.max(0, P.coins - 3); log("事件：丢失 3 金币…", "warn"); }
+    else if (r === 2) { P.moveBonus += 3; log("事件：下次移动速度 +3。", "good"); }
+    else if (r === 3) {
+      // 满手降级为金币：drawCard(true) 静默返回 false，避免与「手牌已满」提示重复且矛盾
+      if (drawCard(true)) log("事件：获得 1 张卡牌。", "good");
+      else { P.coins += 6; log("事件：手牌已满，改为获得 6 金币。", "good"); }
+    }
+    else if (r === 4) { eventSpawnMinions(2); }
+    else if (r === 5) { P.atkBuffNextBattle = (P.atkBuffNextBattle || 0) + 5; log("事件：下次攻击 +5。", "good"); }
+    else if (r === 6) {
+      const h = Math.min(3, P.hpMax - P.hp);
+      P.hp += h;
+      log(h > 0 ? `事件：恢复 ${h} 生命（现 ${P.hp}/${P.hpMax}）。` : "事件：生命已满，未恢复。", "good");
+    }
+    else {
+      P.hp -= 3;
+      log(`事件：失去 3 生命…（剩 ${Math.max(0, P.hp)}）`, "warn");
+      checkPlayerKo(); // 允许被打到 0 血：走凤凰再生拦截与被击倒流程（含轮次进度 +1）
+    }
+  }
+
+  // 事件刷怪：全图随机挑 n 个互不相同的地块，每格刷 1 只随机小怪（不排除任何地块类型）
+  function eventSpawnMinions(n) {
+    const pool = Object.values(D.monsters).filter(d => d.category === "minion");
+    const total = D.map.tiles.length;
+    const picked = [];
+    for (let guard = 0; picked.length < n && guard < 100; guard++) {
+      const p = rnd(total);
+      if (picked.indexOf(p) < 0) picked.push(p);
+    }
+    picked.forEach(p => {
+      const nm = spawnMonster(pool[rnd(pool.length)].id, p);
+      log(`事件：一只【${nm.name}】出现在了地图上！`, "warn");
+    });
   }
 
   // ================= 战斗（设计文档02）=================
