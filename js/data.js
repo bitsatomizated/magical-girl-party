@@ -218,6 +218,7 @@ GAME_DATA.maps = {
     name: "练习环道",
     intro: "这是一条用于热身的练习环道。沿着环道前进，熟悉移动、战斗、商店与筹码的玩法；行至深处，驻守的灾厄核心将是你出师前的最后一考。",
     rounds: 12,
+    fixedDifficulty: "normal", // 教学图锁定普通难度，选关界面灰掉其余难度
   bossTile: 10,
   startTile: 0,
   upgradeCost: (star) => [15, 20, 25][star] ?? null, // 升星费用：1星15 / 2星20 / 3星25，满级 null

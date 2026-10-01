@@ -551,23 +551,32 @@ window.UI = (() => {
         window.__setup.map = m.id;
         [...ml.children].forEach(x => x.classList.remove("selected"));
         el.classList.add("selected");
+        // 教学图锁定难度：切图后若当前难度不可用则回落到锁定难度，并刷新难度按钮
+        const locked = D.maps[window.__setup.map].fixedDifficulty;
+        if (locked && window.__setup.diff !== locked) window.__setup.diff = locked;
+        renderDiffList();
       };
       ml.appendChild(el);
     });
-    // 难度选择
-    const dl = $("diff-list");
-    dl.innerHTML = "";
-    Object.entries(D.difficulties).forEach(([id, name]) => {
-      const el = document.createElement("div");
-      el.className = "diff-btn" + (id === window.__setup.diff ? " selected" : "");
-      el.textContent = name;
-      el.onclick = () => {
-        window.__setup.diff = id;
-        [...dl.children].forEach(x => x.classList.remove("selected"));
-        el.classList.add("selected");
-      };
-      dl.appendChild(el);
-    });
+    renderDiffList();
+    // 难度选择（教学图等 fixedDifficulty 地图仅锁定难度可选，其余灰掉）
+    function renderDiffList() {
+      const locked = D.maps[window.__setup.map]?.fixedDifficulty;
+      const dl = $("diff-list");
+      dl.innerHTML = "";
+      Object.entries(D.difficulties).forEach(([id, name]) => {
+        const disabled = locked && id !== locked;
+        const el = document.createElement("div");
+        el.className = "diff-btn" + (id === window.__setup.diff ? " selected" : "") + (disabled ? " disabled" : "");
+        el.textContent = name + (disabled ? "（教学图不可选）" : "");
+        el.onclick = () => {
+          if (disabled) return;
+          window.__setup.diff = id;
+          renderDiffList();
+        };
+        dl.appendChild(el);
+      });
+    }
     $("btn-start").onclick = startGame;
     $("btn-intro-ok").onclick = () => {
       $("intro-screen").classList.add("hidden");
