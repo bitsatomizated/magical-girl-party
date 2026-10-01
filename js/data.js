@@ -198,7 +198,7 @@ GAME_DATA.monsters = {
              } },
   boss:    { id: "boss",    name: "灾厄核心", category: "boss",   hpMax: 30, attack: 3, defense: 2,
              art: { full: "assets/chars/boss_doom_core_full.png" },
-             move: { stationary: true }, coinDrop: 0, tags: ["boss"],
+             move: { steps: 1 }, coinDrop: 0, tags: ["boss", "aggressive"],
              defend: { rule: "always", stance: "defend" },
              growth: { everyRounds: 2, atk: 1, def: 1, everyRoundsHp: 5, hpGain: 5, heal: 5 },
              phase: { threshold: 0.5, effect: "skillEveryRound" },
@@ -219,7 +219,7 @@ GAME_DATA.maps = {
     intro: "这是一条用于热身的练习环道。沿着环道前进，熟悉移动、战斗、商店与筹码的玩法；行至深处，驻守的灾厄核心将是你出师前的最后一考。",
     rounds: 12,
     fixedDifficulty: "normal", // 教学图锁定普通难度，选关界面灰掉其余难度
-  bossTile: 10,
+  bossTile: 10, // BOSS 刷新位置与格型解耦：10 号格现为疾行格，BOSS 仍刷在此处
   startTile: 0,
   upgradeCost: (star) => [15, 20, 25][star] ?? null, // 升星费用：1星15 / 2星20 / 3星25，满级 null
   shopCost: 3,                            // 卡牌商店单价（占位）
@@ -228,7 +228,7 @@ GAME_DATA.maps = {
   tiles: [
     { t: "start" },   { t: "draw" },   { t: "event" },  { t: "shop" },
     { t: "spawn", mob: "dummy" }, { t: "heal" }, { t: "dash" }, { t: "event" },
-    { t: "event" }, { t: "chipshop" }, { t: "boss" }, { t: "damage" },
+    { t: "event" }, { t: "chipshop" }, { t: "dash" }, { t: "damage" },
     { t: "draw" }, { t: "event" }, { t: "event" }, { t: "upgrade" },
     { t: "heal" }, { t: "assault" }, { t: "event" }, { t: "damage" },
   ],
