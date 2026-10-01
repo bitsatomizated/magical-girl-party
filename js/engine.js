@@ -660,6 +660,7 @@ window.Engine = (() => {
       S.player.lastFrom = mv.prev; // 记录来路：下回合从这一格的位置继续，方向不重置
       mv.steps--;
       S.player.pos = next;
+      mv.asked = null; // 进入新格即清空「本格已询问」记录：绕回同一格会重新询问（每次经过都能再战）
       if (S.player.flameActive) layFlame(next); // 青焰含途经与终点格
       window.UI.renderAll(); // 步进可视化
       if (ANIM) await delay(ANIM);
@@ -763,7 +764,8 @@ window.Engine = (() => {
 
   // 地块怪物结算（路过与停留的统一入口）：
   // 先处理地块上的怪物——**按怪逐个询问**是否交战，答应则与之战斗；返回 true 表示已开战
-  // asked 记录本次移动中已询问过的怪物 uid：同一只怪不重复询问，拒绝后可继续询问同格其他怪
+  // asked 记录本次结算中已询问过的怪物 uid：一次结算内同一只怪不重复询问（拒绝后可继续问同格其他怪），
+  // 战斗结束重入结算时同样不会重复问；但每次进入新格都会清空（见移动循环），因此再次经过同一格会重新询问
   function offerTileFight(pendingKind) {
     const P = S.player, mv = S.move;
     if (S.over || P.ko) return false;
