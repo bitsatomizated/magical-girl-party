@@ -365,7 +365,8 @@ window.UI = (() => {
         svg += arrow(m.pos, n, 0.66, cls, (mi++ % 3) * 7);
       });
       // 瞄准模式：候选怪物按「目标编号」逐个标出（同格多怪水平排开，避免标记重叠、便于精确锁怪）
-      if (S.targeting) {
+      // 甜品登场的瞄准对象是地块不是怪物，跳过（candidates 是地块编号，与怪物 uid 数值可能重叠）
+      if (S.targeting && !S.targeting.deploy) {
         const candIds = S.targeting.candidates;
         const cand = S.monsters.filter(m => candIds.includes(m.uid) && m.hp > 0);
         const byTile = {};
@@ -416,7 +417,11 @@ window.UI = (() => {
     if (S.over) { addButton(act, "重新开始", () => { $("log").innerHTML = ""; Engine.newGame(); }, "primary"); return; }
     if (S.phase === "play") {
       if (S.targeting) {
-        addButton(act, `🎯 瞄准中：${S.targeting.cardName}（点棋盘编号标记或右侧怪物条目锁怪）`, () => {}, "", true);
+        if (S.targeting.deploy) {
+          addButton(act, `🍰 ${S.targeting.cardName}：点击棋盘绿色高亮地块放置甜品使魔`, () => {}, "", true);
+        } else {
+          addButton(act, `🎯 瞄准中：${S.targeting.cardName}（点棋盘编号标记或右侧怪物条目锁怪）`, () => {}, "", true);
+        }
         addButton(act, "取消瞄准", () => Engine.cancelTargeting(), "primary");
         return;
       }
