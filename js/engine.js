@@ -161,7 +161,7 @@ window.Engine = (() => {
       },
       monsters: [], monsterSeq: 0, defCount: {}, // defCount：同名怪编号计数
       allies: [], allySeq: 0, // 友方召唤物（甜品使魔等）；与怪物分列，玩家无法攻击
-      famAtkBonus: 0, // 甜品登场：全体甜品使魔攻击力的永久全局加成（新生成的同样生效）
+      famAtkBonus: 0, famHpBonus: 0, // 甜品登场：全体甜品使魔攻击力/生命上限的永久全局加成（新生成的同样生效）
       roundsLimit: m.rounds, // 轮数上限（任务「轮次进度-1」在无法回退时改为延长上限）
       firedRounds: {}, // 已结算过轮次开始效果的轮次：轮次进度回退后再次经过该轮时不得重复刷怪/重复加成
       bossRounds: 0, battle: null, chipPurchases: 0, lastChips: [], chipQueue: [], chipRefreshLeft: 2,
@@ -1222,7 +1222,7 @@ window.Engine = (() => {
   function spawnFamiliar(pos) {
     const def = D.allies.dessert_familiar;
     const a = { uid: ++S.allySeq, def, name: `${def.name}${S.allySeq}`, pos,
-      hp: def.hpMax, hpMax: def.hpMax,
+      hp: def.hpMax + (S.famHpBonus || 0), hpMax: def.hpMax + (S.famHpBonus || 0),
       atk: def.attack + (S.famAtkBonus || 0), def: def.defense,
       nextMoveBonus: 0, firstStep: null, // firstStep：登场时玩家指定的初始移动方向
       lastFrom: null, queuedNext: null }; // 来路继承与预掷方向：与怪物同一套「不掉头」通则
@@ -1271,11 +1271,12 @@ window.Engine = (() => {
     if (!t.deploy) return;
     S.targeting = null;
     S.famAtkBonus = (S.famAtkBonus || 0) + 2;
-    S.allies.forEach(a => { a.atk += 2; });
+    S.famHpBonus = (S.famHpBonus || 0) + 2;
+    S.allies.forEach(a => { a.atk += 2; a.hpMax += 2; a.hp += 2; });
     const a = spawnFamiliar(pos);
     const p = D.player.activeSkill;
     S.player.skillCd = p.cooldown;
-    log(`【${p.name}】发动：【${a.name}】在第 ${pos} 格登场！所有甜品使魔攻击力永久 +2（现 ${a.atk}）。`, "good");
+    log(`【${p.name}】发动：【${a.name}】在第 ${pos} 格登场！所有甜品使魔最大生命与攻击力永久 +2（现 ${a.hp}/${a.hpMax}，攻 ${a.atk}）。`, "good");
     // 第二段：初始方向选择（候选 = 登场格的全部邻格；取消则由使魔自行追击）
     S.targeting = { deployDir: true, ally: a, candidates: S.adj[pos].slice(), cardName: p.name };
     log(`请点击相邻地块，确定【${a.name}】的初始移动方向。`);
