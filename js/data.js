@@ -110,7 +110,7 @@ GAME_DATA.characters = {
     move: { dice: 1, faces: 10 },
     initialCoins: 12,
     activeSkill: { name: "甜品登场", cooldown: 3,
-      desc: "指定 3 格内一个地块，生成一个甜品使魔；所有甜品使魔的最大生命与攻击力永久 +2（全局生效，含此后生成的）",
+      desc: "指定 3 格内一个地块，生成一个甜品使魔；所有甜品使魔的最大生命 +2、攻击力 +1（全局生效，含此后生成的）",
       effect: "sweetDeploy" },
     passiveSkill: { name: "治愈魔法", trigger: "onAllyPass",
       desc: "路过甜品使魔时，回复其 5 点生命，并使该甜品使魔下次移动速度 +3",

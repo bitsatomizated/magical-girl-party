@@ -1270,13 +1270,13 @@ window.Engine = (() => {
     }
     if (!t.deploy) return;
     S.targeting = null;
-    S.famAtkBonus = (S.famAtkBonus || 0) + 2;
+    S.famAtkBonus = (S.famAtkBonus || 0) + 1;
     S.famHpBonus = (S.famHpBonus || 0) + 2;
-    S.allies.forEach(a => { a.atk += 2; a.hpMax += 2; a.hp += 2; });
+    S.allies.forEach(a => { a.atk += 1; a.hpMax += 2; a.hp += 2; });
     const a = spawnFamiliar(pos);
     const p = D.player.activeSkill;
     S.player.skillCd = p.cooldown;
-    log(`【${p.name}】发动：【${a.name}】在第 ${pos} 格登场！所有甜品使魔最大生命与攻击力永久 +2（现 ${a.hp}/${a.hpMax}，攻 ${a.atk}）。`, "good");
+    log(`【${p.name}】发动：【${a.name}】在第 ${pos} 格登场！所有甜品使魔最大生命 +2、攻击力 +1（现 ${a.hp}/${a.hpMax}，攻 ${a.atk}）。`, "good");
     // 第二段：初始方向选择（候选 = 登场格的全部邻格；取消则由使魔自行追击）
     S.targeting = { deployDir: true, ally: a, candidates: S.adj[pos].slice(), cardName: p.name };
     log(`请点击相邻地块，确定【${a.name}】的初始移动方向。`);
