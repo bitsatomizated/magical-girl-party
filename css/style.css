@@ -5,10 +5,11 @@ body { font-family: "Microsoft YaHei", sans-serif; background: #14141f; color: #
 .win-record { text-align: center; font-size: 14px; color: #ffd76e; margin: -10px 0 0; }
 
 /* ---- 开场选择界面 ---- */
-#start-screen { position: fixed; inset: 0; z-index: 100; background: #14141f; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; overflow-y: auto; }
+#start-screen { position: fixed; inset: 0; z-index: 100; background: #14141f; display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 18px; padding: 24px; overflow-y: auto; }
+#start-screen > * { flex-shrink: 0; }
 #start-screen.hidden { display: none; } /* ID 优先级高于 .hidden，需显式覆盖 */
 #start-screen h1 { color: #ffd76e; letter-spacing: 4px; }
-#start-screen .setup-sec { width: 100%; max-width: 860px; }
+#start-screen .setup-sec { width: 100%; max-width: 1000px; }
 #start-screen h2 { color: #9aa; font-size: 17px; margin-bottom: 8px; }
 .setup-list { display: flex; flex-wrap: wrap; gap: 12px; }
 .setup-card { width: 232px; border: 1px solid #444; border-radius: 8px; padding: 12px; background: #1c1c2c; cursor: pointer; display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
@@ -24,6 +25,8 @@ body { font-family: "Microsoft YaHei", sans-serif; background: #14141f; color: #
 .diff-btn.disabled { opacity: 0.35; cursor: not-allowed; }
 .diff-btn.disabled:hover { border-color: #444; }
 #btn-help { font-size: 15px; padding: 8px 26px; }
+.setup-secondary { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+#btn-tutorial { font-size: 15px; padding: 8px 26px; border-color: #ffd76e; color: #ffd76e; }
 #btn-start { font-size: 18px; padding: 11px 40px; }
 
 /* ---- 玩法介绍页 ---- */
@@ -66,6 +69,7 @@ body { font-family: "Microsoft YaHei", sans-serif; background: #14141f; color: #
 #hud .stat b { color: #ffd76e; }
 
 main { display: flex; height: calc(100vh - 45px); }
+
 #board-wrap { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 12px; padding: 12px; overflow: auto; }
 #board { flex: 1; min-width: 0; max-width: 860px; margin: 0 auto; }
 #board svg { width: 100%; height: auto; display: block; }
@@ -203,3 +207,29 @@ h3 { color: #ffd76e; }
 #battle-art .art-slot figcaption { font-size: 11px; color: #9aa; margin-top: 2px; }
 #battle-art .art-vs { font-weight: bold; color: #ff4dd2; font-size: 16px; padding-bottom: 60px; }
 #info .mob-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 5px; border: 1px solid #556; }
+
+/* 新手教程：独立于正式界面的布局覆盖 */
+#tutorial-panel { grid-column: 1 / -1; background: #232333; border-bottom: 2px solid #ffd76e; padding: 14px 20px; }
+#tutorial-panel.hidden { display: none; }
+.tutorial-heading { display: flex; justify-content: space-between; gap: 12px; color: #ffd76e; font-size: 13px; }
+#tutorial-mode, #tutorial-feedback { color: #b6b6cb; font-size: 12px; }
+#tutorial-title { font-size: 19px; margin: 8px 0; }
+#tutorial-title:focus { outline: none; }
+#tutorial-text { max-width: 1000px; font-size: 15px; line-height: 1.7; }
+#tutorial-feedback { margin: 6px 0 10px; line-height: 1.5; }
+#tutorial-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+#tutorial-extra { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+#tutorial-extra:empty { display: none; }
+body.tutorial-active main { display: grid; grid-template-columns: minmax(0, 1fr) 452px; grid-template-rows: auto minmax(0, 1fr); }
+body.tutorial-active #side { width: auto; min-height: 0; }
+body.tutorial-active #side > div { flex-shrink: 0; }
+body.tutorial-active #hand:empty { display: none; }
+body.tutorial-active #board { max-width: min(100%, calc(100vh - 310px)); }
+body.tutorial-active #info { order: 5; max-height: 160px; }
+body.tutorial-active #log { order: 6; }
+body.tutorial-active #battle-art .art-slot img { width: 70px; height: 100px; }
+body.tutorial-active #map-side { display: none; }
+body.tutorial-show-map-info #map-side { display: flex; }
+body.tutorial-reading-info #info { order: -1; max-height: none; }
+.tutorial-focus { outline: 2px solid #ffd76e; outline-offset: 3px; border-radius: 5px; }
+.tutorial-disabled { opacity: .45; cursor: not-allowed; }

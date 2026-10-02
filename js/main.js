@@ -10,6 +10,7 @@ window.addEventListener("DOMContentLoaded", () => {
     message.textContent = error.message;
     document.getElementById("start-screen").appendChild(message);
     document.getElementById("btn-start").disabled = true;
+    document.getElementById("btn-tutorial").disabled = true;
     return;
   }
   window.UI.renderSetup(); // 开场选择界面；选完点「开始游戏」进入对局

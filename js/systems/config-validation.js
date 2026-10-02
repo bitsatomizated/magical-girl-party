@@ -99,7 +99,7 @@
       if (!handler) { fields(value, path, common); fail(`${path}.effect`, `未注册技能：${String(value.effect)}`); return; }
       const compatible = {
         playerActive: ["playerActive"],
-        playerPassive: ["playerInit", "playerTurnStart", "playerTurnEnd", "playerAttackValue", "playerHit", "playerDamaged", "playerEnterTile", "playerKill", "playerLethal", "playerPassAlly", "monsterPassPlayer"],
+        playerPassive: ["playerInit", "playerTurnStart", "playerTurnEnd", "playerEffectCardDamage", "playerCardPlayed", "playerAttackValue", "playerHit", "playerDamaged", "playerEnterTile", "playerKill", "playerLethal", "playerPassAlly", "monsterPassPlayer"],
         monsterActive: ["monsterTurnStart", "monsterAttack", "monsterDefend"],
         monsterPassive: ["monsterTurnStart", "monsterStats", "monsterDamaged", "monsterDealtDamage", "monsterPassDamage", "monsterPassMonster", "monsterAbsorb", "monsterFuse"],
       };
@@ -257,7 +257,7 @@
         if (["name", "school", "rarity", "desc", "id"].includes(key)) continue;
         if (["sancai", "atkPerMark"].includes(key)) rule(value, `${path}.${key}`, "boolean");
         else if (key === "auraRange" && value === null) continue;
-        else rule(value, `${path}.${key}`, key === "perWealthDiv" ? "positiveInt" : "nonnegative");
+        else rule(value, `${path}.${key}`, key === "perWealthDiv" ? "positiveInt" : ["handLimit", "skillCooldownReduction", "effectCardMarks"].includes(key) ? "nonnegativeInt" : "nonnegative");
       }
     });
     return issues;

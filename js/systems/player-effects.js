@@ -1,6 +1,44 @@
 // 角色技能处理器：参数来自技能数据，状态通过服务读取，渲染与回合调度由引擎负责。
 (function () {
-  function install(effects, { getState, log, graphDist, drawCard, drawBattleCard }) {
+  function install(effects, { getState, log, graphDist, drawCard, drawBattleCard, grantCard, maxHandSize }) {
+    effects.register("manaRecycle", {
+      playerActive(p) {
+        const P = getState().player;
+        const discarded = P.hand.filter(c => c.type === "battle");
+        const cost = discarded.reduce((sum, c) => sum + c.cost, 0);
+        P.hand = P.hand.filter(c => c.type !== "battle");
+        const count = Math.floor(cost / p.costPerCard);
+        log(`【${p.name}】丢弃 ${discarded.length} 张战斗牌（合计 ${cost} 费），可生成 ${count} 张专属牌。`, "good");
+        grantCard(p.card, count);
+      },
+    }, { card: "cards", costPerCard: "positiveInt" });
+    effects.register("arcaneCharge", {
+      playerInit(p) {
+        const P = getState().player;
+        P.cardDamageBonuses = { [p.card]: 0 };
+        P.cardPlayCounts = { [p.card]: 0 };
+      },
+      playerTurnStart(p) {
+        if (getState().player.hand.length <= p.handLimit) {
+          log(`【${p.name}】发动。`, "good");
+          grantCard(p.card, 1);
+        }
+      },
+      playerEffectCardDamage(p, context) {
+        if (context.card.id === p.card) context.damage += getState().player.cardDamageBonuses[p.card];
+      },
+      playerCardPlayed(p, { card }) {
+        if (card.id !== p.card) return;
+        const P = getState().player, bonuses = P.cardDamageBonuses;
+        const progress = ++P.cardPlayCounts[p.card] % p.everyCards;
+        if (progress) {
+          log(`【${p.name}】充能进度 ${progress}/${p.everyCards}，再打出 ${p.everyCards - progress} 张【${card.name}】后伤害永久 +${p.growth}。`);
+          return;
+        }
+        bonuses[p.card] += p.growth;
+        log(`【${p.name}】本局【${card.name}】伤害永久 +${p.growth}，下次造成 ${card.dmg + bonuses[p.card]} 点基础伤害。`, "good");
+      },
+    }, { card: "cards", handLimit: "nonnegativeInt", growth: "nonnegative", everyCards: "positiveInt" });
     effects.register("pixelate", {
       playerActive(p) {
         getState().player.buffs.push({ name: p.name, atk: p.value, turns: 99, pixel: true });
@@ -66,8 +104,8 @@
       },
       playerKill(p, { target }) {
         if ((target.hunt || 0) <= 0 || !p.drawOnKill) return;
-        if (getState().player.hand.length >= 8) {
-          log(`【${p.name}】击倒带【追猎】的敌人，但手牌已满（8），无法抽取。`, "warn");
+        if (getState().player.hand.length >= maxHandSize()) {
+          log(`【${p.name}】击倒带【追猎】的敌人，但手牌已满（${maxHandSize()}），无法抽取。`, "warn");
         } else {
           const card = drawBattleCard();
           log(`【${p.name}】击倒带【追猎】的敌人：抽取 1 张战斗牌【${card.name}】。`, "good");

@@ -22,7 +22,10 @@
     <div id="diff-list" class="setup-list"></div>
   </div>
   <button id="btn-start" class="primary">开始游戏</button>
-  <button id="btn-help">玩法介绍</button>
+  <div class="setup-secondary">
+    <button id="btn-help">玩法介绍</button>
+    <button id="btn-tutorial">新手教程</button>
+  </div>
 </div>
 
 <div id="help-screen" class="hidden">
@@ -39,7 +42,7 @@
       <p>你有「战斗点数」（3 + 星级），可打战斗牌加攻/防，然后双方各掷一颗骰子比大小，伤害保底 1 点。被怪攻击时选「防御」或「闪避」；会反击的怪被打后立刻还手。</p>
     </div>
     <div class="help-sec"><h2>卡牌与筹码</h2>
-      <p>手牌上限 8 张：战斗牌只在战斗中用，效果牌只在出牌阶段用。<b>筹码</b>是局内被动遗物，通过任务、升星、筹码商店 3 选 1 获得。</p>
+      <p>基础手牌上限 8 张，持有「扩容」后为 10 张：战斗牌只在战斗中用，效果牌只在出牌阶段用。<b>筹码</b>是局内被动遗物，通过任务、升星、筹码商店 3 选 1 获得。</p>
     </div>
     <div class="help-sec"><h2>金币 / 星级 / 任务</h2>
       <p>打怪、事件赚金币；在升级点花金币升星，变强并解锁更好的筹码概率。完成地图任务额外奖励筹码 3 选 1。</p>
@@ -69,6 +72,18 @@
 </header>
 
 <main>
+  <section id="tutorial-panel" class="hidden" aria-label="新手教程">
+    <div class="tutorial-heading"><span id="tutorial-progress"></span><span id="tutorial-mode"></span></div>
+    <h2 id="tutorial-title" tabindex="-1"></h2>
+    <p id="tutorial-text" aria-live="polite"></p>
+    <p id="tutorial-feedback"></p>
+    <div id="tutorial-extra" aria-label="导览与判断"></div>
+    <div id="tutorial-controls">
+      <button id="tutorial-next" class="primary hidden">下一节</button>
+      <button id="tutorial-retry">重试本节</button>
+      <button id="tutorial-exit">退出教程</button>
+    </div>
+  </section>
   <section id="board-wrap">
     <aside id="map-side">
       <div id="event-list" class="map-panel"></div>
@@ -132,6 +147,7 @@
 <script src="js/systems/monster-effects.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/tutorial.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

@@ -5,6 +5,8 @@
     playerActive: { scope: "角色主动", at: "出牌阶段通过操作许可检查后", context: "deferred：选目标时延后冷却" },
     playerTurnStart: { scope: "角色被动", at: "回合开始筹码结算后、进入出牌阶段前", context: "无" },
     playerTurnEnd: { scope: "角色被动", at: "玩家行动结束、通用持续效果递减前", context: "无" },
+    playerEffectCardDamage: { scope: "角色被动", at: "伤害效果牌预览或结算取值，不修改状态", context: "card, damage, preview", preview: true },
+    playerCardPlayed: { scope: "角色被动", at: "卡牌成功结算后、回收筹码前；取消瞄准与丢弃不触发", context: "card" },
     playerAttackValue: { scope: "角色被动", at: "攻击力取值，早于骰点和伤害", context: "target, bonus, parts, preview", preview: true },
     playerHit: { scope: "角色被动", at: "玩家战斗造成正伤害后、命中筹码前；若目标已死，击杀已先结算", context: "target, damage" },
     playerDamaged: { scope: "角色被动", at: "玩家扣血及受伤筹码后、调用方致死判定前；不含直接生命代价", context: "raw, damage, source, attacker（可为 null）" },

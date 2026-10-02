@@ -18,6 +18,7 @@
       const S = getState();
       const c = D.chips[id]; if (!c) return false;
       S.player.chips.push(id);
+      if (c.skillCooldownReduction) S.player.skillCd = Math.max(0, S.player.skillCd - c.skillCooldownReduction);
       log(`获得筹码【${c.name}】（${c.school}·${RARITY_CN[c.rarity]}）：${c.desc}`, "good");
       // 层数词条：财富层数入手立即入层（下回合开始产币）；
       // 再生不留待入层——它在每回合开始时按已有芯片重新获得层数（见 turnStartEffects）

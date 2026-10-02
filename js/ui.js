@@ -34,6 +34,7 @@ window.UI = (() => {
   function renderAll() {
     const S = Engine.state;
     if (!S) return;
+    window.Tutorial?.update(S);
     const P = S.player;
     $("hud-round").textContent = S.round;
     $("hud-rounds").textContent = S.roundsLimit ?? window.GAME_DATA.map.rounds;
@@ -63,6 +64,7 @@ window.UI = (() => {
 
     renderInfo(S); renderMapSide(S);
     renderBoard(S); renderHand(S); renderActions(S);
+    window.Tutorial?.render(S);
   }
 
   // 棋盘左侧栏：事件日程与地图任务（与怪物信息分离，避免信息面板过长）
@@ -91,7 +93,7 @@ window.UI = (() => {
 
   function renderShop(S) {
     const shop = S.shop;
-    $("shop-coins").innerHTML = `当前金币：<b>${S.player.coins}</b>｜每张卡售价见卡片（手牌上限 8）`;
+    $("shop-coins").innerHTML = `当前金币：<b>${S.player.coins}</b>｜每张卡售价见卡片（手牌上限 ${Engine.maxHandSize()}）`;
     const offers = $("shop-offers");
     offers.innerHTML = "";
     shop.offers.forEach((o, i) => {
@@ -99,7 +101,7 @@ window.UI = (() => {
       el.className = "shop-item";
       const c = o.card;
       el.innerHTML = `<input type="checkbox" data-idx="${i}" ${o.sold ? "disabled" : ""}>` +
-        `<span class="card ${c.type}${o.sold ? " disabled" : ""}"><b>${c.name}</b>${c.type === "battle" ? `<span class="cost">战斗牌</span>` : "<span class='cost'>效果牌</span>"}${c.desc}</span>` +
+        `<span class="card ${c.type}${o.sold ? " disabled" : ""}"><b>${c.name}</b>${c.type === "battle" ? `<span class="cost">战斗牌</span>` : "<span class='cost'>效果牌</span>"}${Engine.cardDescription(c)}</span>` +
         `<span class="price">${o.sold ? "已售出" : `◉ ${o.cost}`}</span>`;
       offers.appendChild(el);
     });
@@ -166,8 +168,11 @@ window.UI = (() => {
       `移动去向：${(() => { const p = Engine.peekPlayerNext(); return p != null ? `下一步 → ${tileNameAt(S, p)}` : "前方岔路，移动时选择"; })()}<br>` +
       `财富层数 ${S.player.wealth}｜再生层数 ${S.player.regen}` +
       ((() => { const per = (S.player.chips || []).reduce((n, id) => n + (D.chips[id]?.regenStacks || 0), 0); return per ? `（每回合开始时 +${per}）` : ""; })()) +
-      `<br>主动【${P.activeSkill.name}】（CD${P.activeSkill.cooldown}）：${P.activeSkill.desc} ${cd > 0 ? `｜冷却中：${cd} 轮` : "｜<span class='good'>就绪</span>"}` +
+      `<br>手牌 ${S.player.hand.length}/${Engine.maxHandSize()}` +
+      `<br>主动【${P.activeSkill.name}】（CD${Engine.skillCooldown()}）：${P.activeSkill.desc} ${cd > 0 ? `｜冷却中：${cd} 轮` : "｜<span class='good'>就绪</span>"}` +
       `<br>被动【${P.passiveSkill.name}】：${P.passiveSkill.desc}` +
+      Object.keys(S.player.cardDamageBonuses || {}).map(id =>
+        `<br><span class="good">【${D.cards[id].name}】当前伤害 ${Engine.effectCardDamage(D.cards[id])}｜本局累计 +${S.player.cardDamageBonuses[id]}｜充能 ${S.player.cardPlayCounts[id] % P.passiveSkill.everyCards}/${P.passiveSkill.everyCards}</span>`).join("") +
       (S.player.buffs.length ? `<br>当前效果：${S.player.buffs.map(b =>
         `【${b.name}】${b.atk ? `攻+${b.atk}` : ""}${b.dmgTaken ? "（受伤+1）" : ""}${b.heal ? "（回合开始回血）" : ""}`).join(" ")}` : "") +
       `</div>`;
@@ -414,7 +419,7 @@ window.UI = (() => {
     S.player.hand.forEach((c, i) => {
       const el = document.createElement("div");
       el.className = `card ${c.type}` + (inPlay && c.type === "effect" ? " selectable" : "");
-      el.innerHTML = `<b>${c.name}</b>${c.type === "battle" ? `<span class="cost">耗${c.cost}点</span>` : ""}${c.desc}`;
+      el.innerHTML = `<b>${c.name}</b>${c.type === "battle" ? `<span class="cost">耗${c.cost}点</span>` : ""}${Engine.cardDescription(c)}`;
       if (inPlay && c.type === "effect") el.onclick = () => Engine.playCard(i);
       hand.appendChild(el);
     });
@@ -687,6 +692,8 @@ window.UI = (() => {
       $("help-screen").classList.add("hidden");
       $("start-screen").classList.remove("hidden");
     };
+    if ($("btn-tutorial")) $("btn-tutorial").onclick = () => window.Tutorial?.start();
+    window.Tutorial?.renderEntry();
   }
 
   // 开场界面的胜利场次展示（读取 localStorage，与引擎记录键一致）

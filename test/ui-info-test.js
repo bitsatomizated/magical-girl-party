@@ -128,13 +128,13 @@ check(`列表渲染全部非 hidden 地图（实际 ${mapCards.length} 张 / 数
   mapCards.length === visibleMaps.length && visibleMaps.length >= 2);
 check(`列表按注册顺序展示：${visibleMaps.map(m => m.name).join("、")}`,
   mapCards.length === visibleMaps.length && mapCards.every((el, i) => el.innerHTML.includes(visibleMaps[i].name)));
-check("教学图与正式图都在列表中（练习环道 / 女仆咖啡厅 / 卡牌实验室）",
-  mapCards.some(el => el.innerHTML.includes("练习环道")) && mapCards.some(el => el.innerHTML.includes("女仆咖啡厅")) &&
+check("选关仅展示正式地图（女仆咖啡厅 / 卡牌实验室），教学从独立入口进入",
+  !mapCards.some(el => el.innerHTML.includes("练习环道")) && mapCards.some(el => el.innerHTML.includes("女仆咖啡厅")) &&
   mapCards.some(el => el.innerHTML.includes("卡牌实验室")));
 check("hidden 的测试地图不出现在列表（环心捷径）",
   !mapListEl.innerHTML.includes("环心捷径"));
 check(`默认选中第一张非 hidden 地图（${visibleMaps[0].name}）`,
-  w.__setup.map === visibleMaps[0].id && w.__setup.map === "tutorial_ring");
+  w.__setup.map === visibleMaps[0].id && w.__setup.map === "maid_cafe");
 check("默认选中的卡片恰好一张且带 selected 标记",
   !!mapCards[0] && mapCards.filter(el => el.classList.contains("selected")).length === 1 &&
   mapCards[0].classList.contains("selected"));

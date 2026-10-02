@@ -4,9 +4,9 @@ window.Engine = (() => {
   const AI_DELAY = window.__FAST__ ? 0 : 400; // 无头测试置 __FAST__ 关闭演出延迟
   const ANIM = window.__FAST__ ? 0 : 220;     // 移动步进动画间隔
   const rnd = (n) => Math.floor(Math.random() * n);
-  const d6 = () => rnd(6) + 1;                // 战斗骰
-  const d10 = () => rnd(10) + 1;              // 移动骰
-  const rollRange = (c) => c.min + rnd(c.max - c.min + 1); // 随机数值牌打出时掷点
+  const d6 = () => window.Tutorial?.roll("battle") ?? rnd(6) + 1;
+  const d10 = () => window.Tutorial?.roll("movement") ?? rnd(10) + 1;
+  const rollRange = (c) => window.Tutorial?.cardValue(c) ?? c.min + rnd(c.max - c.min + 1);
   const log = (...args) => window.UI.log(...args); // 延迟解析：engine 先于 ui 加载时不崩溃
 
   let S = null; // 游戏状态
@@ -32,7 +32,7 @@ window.Engine = (() => {
   const playerHandlers = window.GamePlayerEffects || require("./systems/player-effects.js");
   const monsterHandlers = window.GameMonsterEffects || require("./systems/monster-effects.js");
   const effects = effectSystem.create({ getDifficulty: () => D.diff || "normal", difficulties: Object.keys(D.difficulties || {}) });
-  playerHandlers.install(effects, { getState, log, graphDist, drawCard, drawBattleCard });
+  playerHandlers.install(effects, { getState, log, graphDist, drawCard, drawBattleCard, grantCard, maxHandSize });
   monsterHandlers.install(effects, { getState, data: D, log, rnd, makeMonster, spawnMonster,
     spawnNear, rollNextStep, monstersAt, playerTakesDamage, checkPlayerKo, effAtk });
   function playerEffects(timing, context = {}) {
@@ -66,6 +66,11 @@ window.Engine = (() => {
     const lowHp = P.hp <= P.hpMax / 2;
     if (lowHp) atk += chipSum("lowHpAtk"); // 不屈 II
     return { atk, def, speed, pts, lowHp };
+  }
+
+  function maxHandSize() { return 8 + (S ? chipSum("handLimit") : 0); }
+  function skillCooldown(skill = D.player.activeSkill) {
+    return Math.max(0, skill.cooldown - (S ? chipSum("skillCooldownReduction") : 0));
   }
 
   // ================= 初始化 =================
@@ -121,7 +126,10 @@ window.Engine = (() => {
       const b = D.monsters[m.bossMob || "boss"]; // 地图可指定驻守 BOSS（默认灾厄核心）
       S.monsters.push(makeMonster(b, m.bossTile));
     }
-    log(`地图「${m.name}」：共 ${m.rounds} 轮。击败${m.bossName || "最终 BOSS"}即获胜！`);
+    window.Tutorial?.initialize(S, { makeMonster });
+    log(S.tutorial && !S.tutorial.graduation
+      ? `「${m.name}」：完成上方操作即可进入下一节；本节可随时重试。`
+      : `地图「${m.name}」：共 ${m.rounds} 轮。击败${m.bossName || "最终 BOSS"}即获胜！`);
     startRound();
   }
 
@@ -215,11 +223,38 @@ window.Engine = (() => {
   }
 
   function drawCard(silent) {
-    if (S.player.hand.length >= 8) { if (!silent) log("手牌已满（8），无法抽取。"); return false; }
+    if (S.player.hand.length >= maxHandSize()) { if (!silent) log(`手牌已满（${maxHandSize()}），无法抽取。`); return false; }
     const pool = battlePoolNow().concat(D.effectPool);
     S.player.hand.push({ ...D.cards[pool[rnd(pool.length)]] });
     if (!silent) log("抽了 1 张牌。");
     return true;
+  }
+
+  function grantCard(id, count) {
+    const card = D.cards[id];
+    const gained = Math.min(count, Math.max(0, maxHandSize() - S.player.hand.length));
+    for (let i = 0; i < gained; i++) S.player.hand.push({ ...card });
+    if (gained) log(`获得 ${gained} 张【${card.name}】。`, "good");
+    if (gained < count) log(`手牌上限 ${maxHandSize()} 张，${count - gained} 张【${card.name}】未能获得。`, "warn");
+    return gained;
+  }
+
+  function effectCardDamage(card) {
+    if (!S || card.type !== "effect" || card.kind !== "damage") return card.dmg;
+    return playerEffects("playerEffectCardDamage", { card, damage: card.dmg, preview: true }).damage + chipSum("effectCardDamage");
+  }
+
+  function cardDescription(card) {
+    if (card.type !== "effect" || card.kind !== "damage" || !S) return card.desc;
+    let desc = card.desc;
+    if (S.player.cardDamageBonuses?.[card.id] !== undefined) {
+      return `指定${card.range}格内一名怪物，造成${effectCardDamage(card)}点伤害`;
+    } else if (chipSum("effectCardDamage")) {
+      desc = `${card.range} 格内一个怪物${card.aoe ? `及其周围 ${card.aoe} 格内怪物各` : ""}受 ${effectCardDamage(card)} 点伤害`;
+    }
+    const marks = chipSum("effectCardMarks");
+    if (marks) desc += `；命中后每个目标获得 ${marks} 层标记`;
+    return desc;
   }
 
   // 战斗牌池：星级 ≥2 后蓄力入池（占 2 份，约 1/8 战斗牌概率）；起始卡组仍不含蓄力
@@ -391,7 +426,7 @@ window.Engine = (() => {
   function useSkill() {
     if (!canAct("skill") || !D.player.activeSkill) return;
     const context = effects.emit("playerActive", [D.player.activeSkill], { deferred: false });
-    if (!context.deferred) S.player.skillCd = D.player.activeSkill.cooldown;
+    if (!context.deferred) S.player.skillCd = skillCooldown();
     render();
   }
 
@@ -439,7 +474,7 @@ window.Engine = (() => {
       const h = Math.min(c.heal, P.hpMax - P.hp);
       P.hp += h; log(`【${c.name}】回复 ${h} 点生命。`, "good");
     } else return false;
-    onCardPlayed(); // 回收词条
+    onCardPlayed(c);
     checkPlayerKo();
     if (P.ko) finishPlayerTurn(); // 生命代价导致击倒时立即跳过移动，交给回合调度
     window.UI.renderAll();
@@ -454,15 +489,20 @@ window.Engine = (() => {
     S.targetingResume = false;
     const idx = S.targeting.cardIdx;
     const c = S.player.hand[idx];
+    const t = S.monsters.find(m => m.uid === uid);
+    if (c && (!t || t.hp <= 0 || graphDist(t.pos, S.player.pos) > c.range)) {
+      log("目标已失效，请重新选择。", "warn");
+      return;
+    }
     S.targeting = null;
     if (!c) { window.UI.renderAll(); return; }
     S.player.hand.splice(idx, 1);
-    const t = S.monsters.find(m => m.uid === uid);
+    const damage = effectCardDamage(c);
     log(`【${c.name}】瞄准【${t.name}】！`);
-    dealToMonster(t, c.dmg);
+    dealEffectCardDamage(t, damage);
     if (c.aoe) S.monsters.filter(m => m !== t && m.hp > 0 && graphDist(m.pos, t.pos) <= c.aoe)
-      .forEach(m => { log(`波及【${m.name}】！`); dealToMonster(m, c.dmg); });
-    onCardPlayed(); // 回收词条
+      .forEach(m => { log(`波及【${m.name}】！`); dealEffectCardDamage(m, damage); });
+    onCardPlayed(c);
     checkPlayerKo();
     window.UI.renderAll();
   }
@@ -492,7 +532,11 @@ window.Engine = (() => {
     window.UI.renderAll();
   }
 
-  function onCardPlayed() { const n = chipSum("coinPerCard"); if (n > 0) { S.player.coins += n; log(`【回收】获得 ${n} 金币。`); } }
+  function onCardPlayed(card) {
+    if (card) playerEffects("playerCardPlayed", { card });
+    const n = chipSum("coinPerCard");
+    if (n > 0) { S.player.coins += n; log(`【回收】获得 ${n} 金币。`); }
+  }
 
   function finishPlayPhase() {
     if (!canAct("play")) return;
@@ -506,7 +550,9 @@ window.Engine = (() => {
     if (!canAct("move")) return;
     const P = S.player, faces = D.player.move.faces || 10;
     let steps;
-    if (P.nextFixed > 0) { steps = P.nextFixed; P.nextFixed = 0; log(`遥控骰子：固定 ${steps} 点，开始移动。`); }
+    const trainingSteps = window.Tutorial?.moveSteps(S);
+    if (trainingSteps != null) { steps = trainingSteps; log(`教学路线：本次固定移动 ${steps} 格（正式对局按骰子与移速结算）。`); }
+    else if (P.nextFixed > 0) { steps = P.nextFixed; P.nextFixed = 0; log(`遥控骰子：固定 ${steps} 点，开始移动。`); }
     else {
       let r = die(faces);
       if (P.nextDouble) { r += die(faces); P.nextDouble = false; log("【加急加快】双骰！"); }
@@ -665,7 +711,7 @@ window.Engine = (() => {
       const o = S.shop.offers[i];
       if (!o || o.sold) return;
       if (S.player.coins < o.cost) { log(`金币不足，无法购买【${o.card.name}】。`, "warn"); return; }
-      if (S.player.hand.length >= 8) { log("手牌已满（8），无法购买。", "warn"); return; }
+      if (S.player.hand.length >= maxHandSize()) { log(`手牌已满（${maxHandSize()}），无法购买。`, "warn"); return; }
       S.player.coins -= o.cost;
       S.player.hand.push({ ...o.card });
       o.sold = true;
@@ -908,7 +954,7 @@ window.Engine = (() => {
       b.defBonus += v;
       log(`打出【${c.name}】（耗 ${c.cost} 点）：防御 +${v}（合计 +${b.defBonus}）。`);
     }
-    onCardPlayed(); // 回收词条
+    onCardPlayed(c);
     window.UI.renderAll();
   }
 
@@ -957,6 +1003,18 @@ window.Engine = (() => {
         log(`【${c.name}】命中：【${target.name}】获得 ${c.marksOnHit} 层标记（现 ${target.marks}）。`);
       }
     });
+  }
+
+  // 每个效果牌命中单独结算：先吃已有标记伤害，再施加引导的新标记。
+  // 与战斗命中入口分开，避免效果牌触发猎印/财力或青焰触发引导。
+  function dealEffectCardDamage(target, damage) {
+    const dealt = dealToMonster(target, damage);
+    const marks = chipSum("effectCardMarks");
+    if (dealt > 0 && marks > 0) {
+      target.marks = (target.marks || 0) + marks;
+      if (target.hp > 0) log(`【引导】命中：【${target.name}】获得 ${marks} 层标记（现 ${target.marks}）。`, "good");
+    }
+    return dealt;
   }
 
   // 标记是目标的受伤加成，玩家与使魔共用；不触发攻击者的命中/击杀词条。
@@ -1043,6 +1101,7 @@ window.Engine = (() => {
   }
 
   function drawBattleCard() {
+    if (S.player.hand.length >= maxHandSize()) return null;
     const pool = battlePoolNow(), card = D.cards[pool[rnd(pool.length)]];
     S.player.hand.push({ ...card });
     return card;
@@ -1126,7 +1185,7 @@ window.Engine = (() => {
     bonus.atk += atk; bonus.hp += hp;
     S.allies.filter(a => a.definition.id === p.summon).forEach(a => { a.atk += atk; a.hpMax += hp; a.hp += hp; });
     const a = spawnAlly(pos, p.summon);
-    S.player.skillCd = p.cooldown;
+    S.player.skillCd = skillCooldown(p);
     log(`【${p.name}】发动：【${a.name}】在第 ${pos} 格登场！所有同类召唤物最大生命 +${hp}、攻击力 +${atk}（现 ${a.hp}/${a.hpMax}，攻 ${a.atk}）。`, "good");
     // 第二段：初始方向选择（候选 = 登场格的全部邻格；取消则由使魔自行追击）
     S.targeting = { deployDir: true, ally: a, candidates: S.adj[pos].slice(), cardName: p.name };
@@ -1310,7 +1369,7 @@ window.Engine = (() => {
     P.flameActive = false;
     playerEffects("playerTurnEnd");
     turnEndEffects();
-    while (P.hand.length > 8) P.hand.pop();
+    while (P.hand.length > maxHandSize()) P.hand.pop();
     S.phase = "turnEnd";
     log("玩家回合结束。AI 行动中…");
     window.UI.renderAll();
@@ -1464,7 +1523,7 @@ window.Engine = (() => {
     S.battle = null; S.pendingTile = null; S.move = null;
     const bossName = D.map.bossName || "最终 BOSS";
     log(win ? `★ ${bossName}被击败！胜利！` : `轮数耗尽，未能击败${bossName}……失败。`, win ? "good" : "warn");
-    if (win) recordWin();
+    if (win && !S.tutorial) recordWin();
     window.UI.renderAll();
   }
 
@@ -1518,16 +1577,26 @@ window.Engine = (() => {
   }
 
   // ================= 供 UI / 测试调用 =================
-  return {
+  // 返回开始页时取消定时任务，让旧询问、商店和移动的异步续接全部失效。
+  function leaveGame() {
+    if (!S) return;
+    S.over = true;
+    turns.stop();
+    S.ask = null; S.askQueue = []; S.shop = null; S.battle = null;
+    S.chipChoice = null; S.chipQueue = []; S.waitForChips = false;
+    S.targeting = null; S.pendingTile = null; S.move = null;
+  }
+
+  const api = {
     canAct,
     registerEffect: effects.register, effectTimings: effects.timings, effectDefinitions: effects.describe,
     validateConfig: () => configValidation.validate(D, effects.describe()), assertConfig,
-    newGame, useSkill, playCard, finishPlayPhase, rollAndMove, answerAsk,
+    newGame, leaveGame, useSkill, playCard, finishPlayPhase, rollAndMove, answerAsk,
     playerBattlePoints, playBattleCard, playerPlayBattleCard: playBattleCard, resolvePlayerAttack, playerChooseStance,
     attackPreview, defensePreview, pickMoveStep, peekPlayerNext, peekPlayerOptions, peekNext, peekAllyNext, graphDist,
     buyShop, closeShop, pickChip, chipShopPrice, chooseTarget, cancelTargeting, refreshChips,
     chooseDeployTile,
-    derived,
+    derived, effectCardDamage, cardDescription, maxHandSize, skillCooldown,
     // 无头测试与规则模拟的显式接口；测试不再改写引擎源码注入导出。
     _test: {
       ask, aiMove, aiTurns, checkPlayerKo, advanceRoundProgress, rewindRoundProgress,
@@ -1546,4 +1615,16 @@ window.Engine = (() => {
     },
     get state() { return S; },
   };
+  // 教学限制同时应用于真实操作入口，不能仅靠界面禁用按钮。
+  for (const name of ["useSkill", "playCard", "finishPlayPhase", "rollAndMove", "answerAsk",
+    "playBattleCard", "playerPlayBattleCard", "resolvePlayerAttack", "playerChooseStance",
+    "pickMoveStep", "buyShop", "closeShop", "pickChip", "chooseTarget", "cancelTargeting",
+    "refreshChips", "chooseDeployTile"]) {
+    const action = api[name];
+    api[name] = (...args) => {
+      if (window.Tutorial && !window.Tutorial.allow(name, args, S)) return;
+      return action(...args);
+    };
+  }
+  return api;
 })();

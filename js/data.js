@@ -21,6 +21,8 @@ GAME_DATA.cards = {
   brick:    { id: "brick",    name: "板砖",     type: "effect", kind: "damage", range: 3, dmg: 5,       desc: "3 格内一个怪物受 5 点伤害" },
   cannon:   { id: "cannon",   name: "轨道炮",   type: "effect", kind: "damage", range: 5, dmg: 6,       desc: "5 格内一个怪物受 6 点伤害" },
   laser:    { id: "laser",    name: "激光",     type: "effect", kind: "damage", range: 6, dmg: 3,       desc: "6 格内一个怪物受 3 点伤害" },
+  arcaneLaser: { id: "arcaneLaser", name: "魔导激光", type: "effect", kind: "damage", range: 8, dmg: 3, exclusive: true,
+    desc: "指定8格内一名怪物，造成3点伤害" },
   demo:     { id: "demo",     name: "定向爆破", type: "effect", kind: "damage", range: 6, dmg: 4, aoe: 2, desc: "6 格内一个怪物及其周围 2 格内怪物各受 4 点伤害" },
   hurry:    { id: "hurry",    name: "加急加快", type: "effect", kind: "moveMod", doubleDice: true,        desc: "下次移动掷两个骰子" },
   dirChoose:{ id: "dirChoose",name: "方向抉择", type: "effect", kind: "moveMod", chooseDir: true,         desc: "下次移动首步自选方向（可掉头），后续不能掉头" },
@@ -35,7 +37,7 @@ GAME_DATA.cards = {
 GAME_DATA.battlePool = ["atk_s", "atk_s", "atk_m", "atk_m", "atk_l", "atk_l", "def_s", "def_s", "def_m", "def_m", "def_l", "shadow", "shadow", "katana"];
 GAME_DATA.effectPool = ["brick", "cannon", "laser", "demo", "hurry", "hurry", "dirChoose", "diceCtrl", "king", "berserk", "poison", "cake", "cake", "burger"];
 
-// ---- 筹码（docs/设计文档-06 §5.4，共 29 枚）----
+// ---- 筹码（docs/设计文档-06 §5.4，共 35 枚）----
 // 字段：school 流派；rarity blue/purple/gold；数值键与引擎词条挂钩
 GAME_DATA.chips = {
   // 通用
@@ -54,6 +56,9 @@ GAME_DATA.chips = {
   will1:   { name: "不屈 I",   school: "通用", rarity: "blue",   lowHpDef: 1, desc: "生命值 ≤50% 时，受到伤害 -1" },
   will2:   { name: "不屈 II",  school: "通用", rarity: "purple", lowHpDef: 2, lowHpAtk: 4, desc: "生命值 ≤50% 时，受到伤害 -2，攻击力 +4" },
   recycle: { name: "回收",     school: "通用", rarity: "blue",   coinPerCard: 1, desc: "每使用一张战斗牌或效果牌，获得 1 金币" },
+  amplify: { name: "增幅",     school: "通用", rarity: "blue",   effectCardDamage: 1, desc: "效果牌伤害 +1（范围伤害对每个目标生效）" },
+  capacity:{ name: "扩容",     school: "通用", rarity: "blue",   handLimit: 2, desc: "手牌上限 +2" },
+  cycle:   { name: "循环",     school: "通用", rarity: "purple", skillCooldownReduction: 1, desc: "本局主动技能冷却永久 -1，当前剩余冷却也 -1（最低 0）" },
   // 财富（每回合开始获得层数×1 金币）
   wealth1: { name: "财富 I",   school: "财富", rarity: "blue",   wealthStacks: 1, desc: "财富层数 +1" },
   wealth2: { name: "财富 II",  school: "财富", rarity: "purple", wealthStacks: 3, desc: "财富层数 +3" },
@@ -76,6 +81,8 @@ GAME_DATA.chips = {
              desc: "每回合开始时，给予 6 格内所有怪物 1 层标记" },
   rad2:    { name: "辐射 II",  school: "标记", rarity: "gold",   auraMarks: 1, auraRange: null,
              desc: "每回合开始时，给予所有怪物 1 层标记" },
+  guidance:{ name: "引导",     school: "标记", rarity: "purple", effectCardMarks: 1,
+             desc: "效果牌命中后，对每个被击中的目标施加 1 层标记（本次伤害结算后生效）" },
 };
 
 // ---- 可选角色 / 可选地图注册表（开场选择界面数据源；对应 docs/设计文档-05）----
@@ -118,6 +125,19 @@ GAME_DATA.characters = {
     passiveSkill: { name: "治愈魔法",
       desc: "路过甜品使魔时，回复其 5 点生命，并使该甜品使魔下次移动速度 +3",
       effect: "healingPass", value: 5, moveBonus: 3, targets: ["dessert_familiar"] },
+  },
+  char_xingmeng: {
+    id: "char_xingmeng", name: "星梦",
+    starGrowth: { 1: { def: 1, hp: 2, speed: 1 }, 2: { speed: 2 }, 3: { atk: 2, speed: 2 } },
+    art: { full: "assets/chars/char_xingmeng_full.jpg" },
+    hpMax: 18, attack: 1, defense: 3,
+    move: { dice: 1, faces: 10 }, initialCoins: 12,
+    activeSkill: { name: "魔力回收", cooldown: 3,
+      desc: "丢弃所有战斗牌，费用合计每满 4 点获得 1 张【魔导激光】（余数不保留，遵守当前手牌上限）",
+      effect: "manaRecycle", card: "arcaneLaser", costPerCard: 4 },
+    passiveSkill: { name: "魔导充能",
+      desc: "每回合开始时，若手牌不超过 5 张，获得 1 张【魔导激光】；每累计打出 2 张，之后所有魔导激光的伤害在本局永久 +1（初始 3 点，射程 8 格）",
+      effect: "arcaneCharge", card: "arcaneLaser", handLimit: 5, growth: 1, everyCards: 2 },
   },
 };
 
@@ -297,6 +317,7 @@ GAME_DATA.maps = {
   // 新手教学地图：单环 20 格 + BOSS 毕业考；节奏平缓，逐轮引入刷怪与全局强化
   tutorial_ring: {
     id: "tutorial_ring",
+    hidden: true, // 教学入口统一由新手教程提供；保留数据供教学场景与规则测试复用。
     name: "练习环道",
     intro: "这是一条用于热身的练习环道。沿着环道前进，熟悉移动、战斗、商店与筹码的玩法；灾厄核心将是你出师前的最后一考。",
     rounds: 12,
