@@ -54,7 +54,7 @@ window.UI = (() => {
     const askOn = !!S.ask;
     $("ask-panel").classList.toggle("hidden", !askOn);
     // 询问期间不隐藏 #turn-panel：玩家需要一边看手牌/信息一边决定（此时出牌已被 S.ask 拦住）
-    $("turn-panel").classList.toggle("hidden", !!S.battle || !!S.shop || !!S.chipChoice);
+    $("turn-panel").classList.toggle("hidden", !S.over && (!!S.battle || !!S.shop || !!S.chipChoice));
     if (S.shop) renderShop(S);
     if (S.chipChoice) renderChipChoice(S);
     if (askOn) renderAsk(S);
@@ -108,13 +108,13 @@ window.UI = (() => {
     addButton(act, "🛒 购买勾选", () => {
       const sel = [...$("shop-offers").querySelectorAll("input:checked")].map(x => +x.dataset.idx);
       Engine.buyShop(sel);
-    });
-    addButton(act, "离开商店", () => Engine.closeShop(), "primary");
+    }, "", !Engine.canAct("shop"));
+    addButton(act, "离开商店", () => Engine.closeShop(), "primary", !Engine.canAct("shop"));
   }
 
   const RARITY_CN = { blue: "蓝", purple: "紫", gold: "金" };
 
-  // 询问面板（替代原生 confirm / prompt）：非模态渲染，页面其余部分照常可交互
+  // 询问面板：保留信息浏览，改变对局的操作统一由 canAct 控制。
   function renderAsk(S) {
     const a = S.ask;
     $("ask-question").textContent = a.question;
@@ -127,7 +127,7 @@ window.UI = (() => {
       const b = document.createElement("button");
       b.textContent = o.label;
       if (o.cls) b.className = o.cls;
-      b.onclick = () => Engine.answerAsk(o.value);
+      b.onclick = () => Engine.answerAsk(o.value, a);
       act.appendChild(b);
     });
   }
@@ -139,16 +139,17 @@ window.UI = (() => {
       const c = window.GAME_DATA.chips[id];
       if (!c) return;
       const el = document.createElement("div");
-      el.className = `card chip rarity-${c.rarity} selectable`;
+      const can = Engine.canAct("chip");
+      el.className = `card chip rarity-${c.rarity}` + (can ? " selectable" : " disabled");
       el.innerHTML = `<b>${c.name}</b><span class="cost">${c.school}·${RARITY_CN[c.rarity]}</span>${c.desc}`;
-      el.onclick = () => Engine.pickChip(i);
+      if (can) el.onclick = () => Engine.pickChip(i);
       wrap.appendChild(el);
     });
     const left = S.chipRefreshLeft || 0;
     $("chip-title").textContent = `🎴 筹码 3 选 1（剩余刷新 ${left} 次）`;
     const act = $("chip-actions");
     act.innerHTML = "";
-    addButton(act, `🔄 刷新（剩 ${left} 次）`, () => Engine.refreshChips(), "", left <= 0);
+    addButton(act, `🔄 刷新（剩 ${left} 次）`, () => Engine.refreshChips(), "", left <= 0 || !Engine.canAct("chip"));
   }
 
   const TAG_CN = { passive: "不主动攻击", aggressive: "主动攻击", canDodge: "会闪避", usesSkill: "使用技能", boss: "BOSS", counter: "会反击" };
@@ -408,7 +409,7 @@ window.UI = (() => {
   function renderHand(S) {
     const hand = $("hand");
     hand.innerHTML = "";
-    const inPlay = S.phase === "play";
+    const inPlay = Engine.canAct("play");
     S.player.hand.forEach((c, i) => {
       const el = document.createElement("div");
       el.className = `card ${c.type}` + (inPlay && c.type === "effect" ? " selectable" : "");
@@ -431,16 +432,16 @@ window.UI = (() => {
         } else {
           addButton(act, `🎯 瞄准中：${S.targeting.cardName}（点棋盘编号标记或右侧怪物条目锁怪）`, () => {}, "", true);
         }
-        addButton(act, "取消瞄准", () => Engine.cancelTargeting(), "primary");
+        addButton(act, "取消瞄准", () => Engine.cancelTargeting(), "primary", !Engine.canAct("target"));
         return;
       }
       const ready = S.player.skillCd === 0;
-      addButton(act, `主动技能${ready ? "" : `（冷却${S.player.skillCd}）`}`, () => Engine.useSkill(), "", !ready);
-      addButton(act, "结束出牌阶段 →", () => Engine.finishPlayPhase(), "primary");
+      addButton(act, `主动技能${ready ? "" : `（冷却${S.player.skillCd}）`}`, () => Engine.useSkill(), "", !Engine.canAct("skill"));
+      addButton(act, "结束出牌阶段 →", () => Engine.finishPlayPhase(), "primary", !Engine.canAct("play"));
     } else if (S.phase === "move") {
       if (S.targeting) {
         addButton(act, `🎯 ${S.targeting.cardName}：点棋盘编号标记或右侧怪物条目锁怪`, () => {}, "", true);
-        addButton(act, "取消选择", () => Engine.cancelTargeting(), "primary");
+        addButton(act, "取消选择", () => Engine.cancelTargeting(), "primary", !Engine.canAct("target"));
         return;
       }
       const mv = S.move && S.move.who === "player" ? S.move : null;
@@ -448,11 +449,12 @@ window.UI = (() => {
         // 岔路待选：提示剩余步数与可选方向数，点击棋盘高亮地块续走
         const hint = document.createElement("div");
         hint.className = "hint-row";
-        hint.textContent = `🛤 请选择前进方向：剩余 ${mv.steps} 步，可选 ${mv.await.length} 个方向（不能掉头）`;
+        const directionRule = mv.prev != null && mv.await.includes(mv.prev) ? "方向抉择：首步可掉头" : "不能掉头";
+        hint.textContent = `🛤 请选择前进方向：剩余 ${mv.steps} 步，可选 ${mv.await.length} 个方向（${directionRule}）`;
         act.appendChild(hint);
         return;
       }
-      addButton(act, "🎲 掷骰移动", () => Engine.rollAndMove(), "primary");
+      addButton(act, "🎲 掷骰移动", () => Engine.rollAndMove(), "primary", !Engine.canAct("move"));
     }
   }
 
@@ -488,23 +490,22 @@ window.UI = (() => {
       const dv = Engine.derived();
       const apv = Engine.attackPreview ? Engine.attackPreview(t) : { total: dv.atk, parts: [] };
       const enemyAtk = apv.enemyAtk ?? t.atk, enemyDef = apv.enemyDef ?? t.def_;
-      const STANCE_CN_UI = { defend: "防御", dodge: "闪避" };
       $("battle-title").textContent = `战斗：对【${t.name}】`;
       $("battle-info").innerHTML =
         `<b>我方</b>攻击 <b>${apv.total}</b>${b.cardBonus ? "+" + b.cardBonus : ""}${apv.parts.length ? `（${apv.parts.join("，")}）` : ""}｜战斗点数 <b>${Engine.playerBattlePoints() - b.spentPoints}</b>（已用 ${b.spentPoints}）<br>` +
-        `<b>敌方</b>【${t.name}】HP <b>${t.hp}/${t.hpMax}</b>｜攻 <b>${enemyAtk}</b>｜防 <b>${enemyDef}</b>｜姿态 <b>${STANCE_CN_UI[apv.stance] || "防御"}</b>${t.marks ? `｜标记 ${t.marks} 层（我方伤害 +${t.marks}）` : ""}<br>` +
+        `<b>敌方</b>【${t.name}】HP <b>${t.hp}/${t.hpMax}</b>｜攻 <b>${enemyAtk}</b>｜防 <b>${enemyDef}</b>｜姿态 <b>${STANCE_CN[apv.stance] || "防御"}</b>${t.marks ? `｜标记 ${t.marks} 层（我方伤害 +${t.marks}）` : ""}<br>` +
         battleStateLine(S, t) +
         `结算：我方 ${apv.total}${b.cardBonus ? "+" + b.cardBonus : ""} + 我方骰 vs 敌方 ${enemyDef} + 敌方骰，伤害保底 1${apv.stance === "dodge" ? "；敌方闪避姿态时改比骰点（我方骰 ≥ 敌方骰则它不受伤）" : ""}`;
       const pts = Engine.playerBattlePoints() - b.spentPoints;
       S.player.hand.filter(c => c.type === "battle" && c.kind === "atk").forEach(c => {
         const el = document.createElement("div");
-        const can = c.cost <= pts;
+        const can = Engine.canAct("battle") && c.cost <= pts;
         el.className = "card battle" + (can ? " selectable" : " disabled");
         el.innerHTML = `<b>${c.name}</b><span class="cost">耗${c.cost}点</span>${c.desc}`;
         if (can) el.onclick = () => Engine.playerPlayBattleCard(c.id);
         cardsEl.appendChild(el);
       });
-      addButton(actEl, "⚔ 结算攻击", () => Engine.resolvePlayerAttack(), "primary");
+      addButton(actEl, "⚔ 结算攻击", () => Engine.resolvePlayerAttack(), "primary", !Engine.canAct("battle"));
     } else {
       const t = b.target, dv = Engine.derived();
       const dpv = Engine.defensePreview ? Engine.defensePreview(t) : null;
@@ -523,14 +524,14 @@ window.UI = (() => {
       const pts = Engine.playerBattlePoints() - b.spentPoints;
       S.player.hand.filter(c => c.type === "battle" && c.kind === "def").forEach(c => {
         const el = document.createElement("div");
-        const can = c.cost <= pts;
+        const can = Engine.canAct("battle") && c.cost <= pts;
         el.className = "card battle" + (can ? " selectable" : " disabled");
         el.innerHTML = `<b>${c.name}</b><span class="cost">耗${c.cost}点</span>${c.desc}`;
         if (can) el.onclick = () => Engine.playerPlayBattleCard(c.id);
         cardsEl.appendChild(el);
       });
-      addButton(actEl, "🛡 防御", () => Engine.playerChooseStance("defend"));
-      addButton(actEl, "💨 闪避", () => Engine.playerChooseStance("dodge"), "primary");
+      addButton(actEl, "🛡 防御", () => Engine.playerChooseStance("defend"), "", !Engine.canAct("battle"));
+      addButton(actEl, "💨 闪避", () => Engine.playerChooseStance("dodge"), "primary", !Engine.canAct("battle"));
     }
   }
 

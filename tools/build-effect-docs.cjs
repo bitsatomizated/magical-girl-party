@@ -1,0 +1,106 @@
+// 时机表与处理器目录从运行模块生成，避免文档维护第二份技能清单。
+const fs = require("node:fs");
+const path = require("node:path");
+const { create, TIMINGS } = require("../js/systems/effects.js");
+
+function renderDocument() {
+  const registry = create({ getDifficulty: () => "normal", difficulties: ["normal", "hard", "nightmare", "crazy"] });
+  // install 只注册函数，不运行技能；生成目录时无需真实对局服务。
+  require("../js/systems/player-effects.js").install(registry, {});
+  require("../js/systems/monster-effects.js").install(registry, {});
+  const lines = [
+    "# 内容扩展与技能时机", "",
+    "本文件由 `npm run docs:effects` 生成。时机来源是 `js/systems/effects.js` 的 `TIMINGS`；处理器清单直接读取两个技能模块。修改接口说明请编辑 `tools/build-effect-docs.cjs` 后重新生成。", "",
+    "## 新增内容的入口", "",
+    "- 角色、怪物、召唤物、地图配置在 `js/data.js`。角色成长使用自己的 `starGrowth`；省略某星级表示该星级没有属性成长，不会套用其他角色。", "",
+    "- 角色主动使用 `activeSkill`，角色被动使用 `passiveSkill`；怪物主动使用 `skill`，怪物被动使用 `passives` 数组。`effect` 指向已注册处理器，名称、说明和参数由数据提供。", "",
+    "- 相同机制的新内容只填写参数。新机制新增处理器，并绑定下表已有时机；只有确实需要新的结算位置时，才在引擎接入新时机。", "",
+    "- 不再用单个 `trigger` 字符串描述多时机技能：一个处理器可以同时处理经过、攻击取值、击杀等时机，以其注册的 hooks 为准。", "",
+    "## 参数配置", "",
+    "### 角色与召唤物", "",
+    "```js",
+    "starGrowth: { 1: { atk: 1, hp: 2 }, 2: { speed: 2 }, 3: { def: 1 } },",
+    "activeSkill: {",
+    '  name: "召唤", effect: "sweetDeploy", cooldown: 3,',
+    '  summon: "my_ally", range: 2, growth: { atk: 1, hp: 3 },',
+    '  desc: "2 格内召唤；所有同类型单位永久成长",',
+    "},",
+    "passiveSkill: {",
+    '  name: "照料", effect: "healingPass", targets: ["my_ally"],',
+    '  value: 4, moveBonus: 2, desc: "经过同类型召唤物时回血并增加下次移速",',
+    "},",
+    "```", "",
+    "`summon` 必须指向 `GAME_DATA.allies` 中的单位；单位定义需要 `id/name/hpMax/attack/defense/move`。`move` 使用 `{ dice: 1, faces: 10 }`。", "",
+    "成长按召唤物类型存放在 `state.allyBonuses[id]`，同时应用于在场和之后生成的同类单位。不同类型之间不共享成长，重开清空。实例的定义在 `ally.definition`，当前防御数值在 `ally.def`。选择落点前取消不消耗技能；落点确认后结算成长和冷却，随后选择初始方向。", "",
+    "凤凰再生使用 `maxCharges/value/flameGrowth` 配置次数、生命上限代价和青焰成长；追猎使用 `stacks/value/drawOnKill/consumeOnAttack` 配置叠层、攻击加成、击杀抽牌和攻击消耗。", "",
+    "### 怪物联动", "",
+    "- `knightGuard`：`targets` 指定目标 ID，`heal/atk/def` 指定治疗和下次战斗攻防。", "",
+    "- `princessFocus`：`targets` 指定需要刷新冷却的单位。", "",
+    "- `maidLink`：`minDiff` 指定最低难度，`moveByCategory` 指定各分类移速与 `default` 兜底。", "",
+    "- `yuncaiRescue`：`summon/tileType/threshold/onceKey` 指定援军、地块类型、血线及整局一次标记。`onceKey` 写入对局状态，应使用内容独有名称，不能占用 `round/player/monsters` 等引擎字段；当前规则在场上有 BOSS 时不救援。", "",
+    "- `lightSplit`：`summon` 指定分身类型，`copyStats` 指定从本体复制的运行时数值字段，如 `atk/def_`。", "",
+    "- `devourMinions`：`targets/perCount/atkPer` 指定猎物、成长所需数量和成长值。`perCount` 可以按难度配置。", "",
+    "- `spawnAround/fuseMinions/devourMinion`：通过 `mob/count/radius` 或 `tiers/from/into` 指定生成和融合规则。", "",
+    "- `yuxiaShot`：`value/bonusPerStrong/strongCategories` 控制基础伤害及按难度、场上分类数量追加的伤害。", "",
+    "- `bossAura/bloodDrain/passDamage`：分别使用 `atkPer/defPer`、`ratio`、`multiplier` 配置数值。", "",
+    "## 内容配置校验", "",
+    "页面在所有技能模块加载完成后、展示选角界面前校验整个内容库（包含隐藏地图）；每次 `Engine.newGame()` 也会在重置旧局、抽牌和刷怪之前重新检查。失败会一次性报告内容 ID 和字段路径，例如 `characters.char_rococo.activeSkill.summon`。页面初始配置出错时显示错误并禁用开始按钮。", "",
+    "`npm run validate:config` 可独立检查，不启动对局；它按真实页面脚本顺序加载自定义技能模块。`Engine.validateConfig()` 返回 `{ path, message }` 数组，`Engine.assertConfig()` 在失败时抛出带 `issues` 数组的 `ConfigValidationError`。", "",
+    "校验覆盖注册键与 ID、基本属性和骰子、角色成长、技能挂载时机与参数、难度名称及数值、召唤/目标引用、地图边与连通性、地块与刷怪落点、事件轮次、任务目标与奖励档位、卡池与卡牌引用、筹码稀有度和数值。地图 `upgradeCost` 必须是纯查询函数，校验会调用它查询 0～3 星费用；满星必须返回 null 或 undefined。", "",
+    "保留既有默认语义：空或省略 `edges` 使用单环；省略成长不附加成长；按难度参数必须有 `normal` 兜底；合法方向找不到邻格、救援找不到指定格型时仍使用引擎的回退逻辑。事件按格型刷怪则必须能找到该格型。`disabled: true` 不豁免配置校验，避免重新启用时留下错误。", "",
+    "技能的参数规则与处理器一起声明：`registerEffect(effect, hooks, parameters)`。规则对象中的字段默认必填，键末尾 `?` 表示可省略，数组写法 `[规则]` 表示非空数组，嵌套对象表示结构校验。已声明参数契约的技能会拒绝未知参数；`effect/name/desc/disabled/minDiff` 为公共字段，主动技能额外要求非负整数 `cooldown`。", "",
+    "规则名：`string`、`boolean`、`number`（有限数）、`nonnegative`、`positive`、`nonnegativeInt`、`positiveInt`、`ratio`（0～1）；引用使用 `monsters/allies/cards/difficulty`；枚举使用 `category/tileType/copyStat`；`flagKey` 禁止占用引擎字段；`difficultyNonnegative/difficultyPositiveInt` 接受单值或带 normal 的难度表。多种合法参数形态可以传入纯函数 `skill => 参数规则对象`，如融合技能的 tiers 与旧版 mob 形式。", "",
+    "旧的两参数注册方式仍可用，此时只检查技能公共字段与挂载时机，无法推断自定义参数。新增机制应提供第三个参数。校验不执行技能处理器，不检查图片是否存在，也不替代规则行为、数值平衡和完整游玩测试。", "",
+    "## 时机表", "",
+    "表中每一行都有实际引擎调用点。此表描述技能接入位置；回合顺序、战斗与移动续接、定时任务由 `js/systems/turns.js` 统一调度，具体技能和地块规则仍由引擎结算。", "",
+    "| 时机 ID | 挂载位置 | 发生时点 | 上下文 | 可预览 |",
+    "| --- | --- | --- | --- | --- |",
+    ...Object.entries(TIMINGS).map(([id, item]) => `| \`${id}\` | ${item.scope} | ${item.at} | ${item.context} | ${item.preview ? "是" : "否"} |`),
+    "",
+    "## 结算顺序与约定", "",
+    "1. 新局创建状态 → `playerInit` → 初始抽牌/刷怪 → 轮次事件 → 回合开始筹码 → `playerTurnStart` → 出牌阶段。", "",
+    "2. 玩家落步 → `playerEnterTile` → 铺设青焰 → `playerPassAlly` → 交战询问 → 地块结算。突击传送触发 `playerEnterTile`，沿用原规则不触发 `playerPassAlly`。", "",
+    "3. 玩家攻击：`playerAttackValue` → `monsterDefend` → 掷骰和伤害 → 若击杀则 `playerKill` 与公共奖励 → `monsterDamaged` → `playerHit` 与命中筹码 → 存活怪反击。击杀先于命中是现有规则。", "",
+    "4. 怪物攻击玩家：`monsterAttack` → 掷骰/姿态 → 扣血及受伤筹码 → `playerDamaged` → `monsterDealtDamage` → `playerLethal` → 未获救则正式击倒。成功闪避或减伤至 0 不触发 `playerDamaged`，吸血处理器也不回血。", "",
+    "5. 玩家行动结束 → `playerTurnEnd` → 持续效果递减 → 友方召唤物 → 怪物逐个行动。怪物先减冷却，再派发 `monsterTurnStart`；主动技冷却未好时不派发该主动技，被动仍可处理此时机。", "",
+    "6. 经过怪物的效果只由移动方触发；`monsterPassMonster` → `monsterAbsorb` → `monsterFuse`。使魔伤害会触发 `monsterDamaged`，但不会触发玩家命中/击杀技能和筹码。", "",
+    "同次派发按定义顺序同步执行：怪物主动在前、被动数组顺序在后。处理器不得返回 Promise；需要玩家选择时写入 targeting/询问状态，由引擎恢复流程。注册发生一次，处理器通过 `getState()` 或 `Engine.state` 获取当前对局，不能缓存旧局的状态对象。", "",
+    "`preview: true` 是纯查询契约：只能修改传入的数值汇总上下文，不能扣资源、推进冷却、写日志或修改单位。现有处理器已按此约定实现并有回归检查；自定义处理器同样需要遵守，分发器不是状态写入沙箱。", "",
+    "`disabled: true` 可跳过某个技能，供测试和隔离实验使用。未知 effect、重复注册、未知时机和异步处理器会明确报错。", "",
+    "## 注册一个新机制", "",
+    "新模块在 `engine.js` 之后、`main.js` 之前加载；此时还没有开始对局。例如：", "",
+    "```js",
+    'Engine.registerEffect("turnGift", {',
+    "  playerTurnStart(skill) {",
+    "    Engine.state.player.coins += skill.value;",
+    "  },",
+    '}, { value: "nonnegativeInt" });',
+    '// 在角色数据里配置 passiveSkill: { effect: "turnGift", value: 2, name: "赠礼", desc: "回合开始获得 2 金币" }',
+    "```", "",
+    "内部模块沿用 `install(effects, services)`，服务由引擎注入。不要在通用引擎内新增 `if (角色ID)` 分支。默认技能清单如下，自定义外部模块可通过 `Engine.effectDefinitions()` 检查自己的注册结果。", "",
+    "| effect | 处理时机 |", "| --- | --- |",
+    ...registry.describe().map(item => `| \`${item.effect}\` | ${item.timings.map(x => `\`${x}\``).join("、")} |`),
+    "", "## 验证", "",
+    "```sh", "npm run validate:config", "npm test", "npm run docs:effects -- --check", "```", "",
+    "`config-validation-test.js` 覆盖错误字段定位、错误容器汇总、地图连通性、跨内容引用、合法扩展、重开前拦截和页面初始错误提示。", "",
+    "`turn-scheduling-test.js` 覆盖玩家→召唤物→怪物→轮末的顺序、回合结束只结算一次、奖励等待、战斗续接，以及移动动画/询问/商店/奖励期间重开后旧回调失效。", "",
+    "`effect-extension-test.js` 覆盖新角色成长、自定义处理器、重开、预览纯查询、多类型召唤及替换怪物 ID 后的规则复用。现有行为回归仍保留。", "",
+  ];
+  return lines.join("\n");
+}
+
+module.exports = { renderDocument };
+if (require.main === module) {
+  const target = path.join(__dirname, "../docs/内容扩展与技能时机.md");
+  const content = renderDocument();
+  if (process.argv.includes("--check")) {
+    if (!fs.existsSync(target) || fs.readFileSync(target, "utf8").replace(/\r\n/g, "\n") !== content) {
+      throw new Error("时机文档已过期，请执行 npm run docs:effects");
+    }
+    console.log("PASS 技能时机文档与运行模块一致");
+  } else {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, content);
+    console.log(target);
+  }
+}

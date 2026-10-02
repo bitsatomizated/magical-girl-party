@@ -1,0 +1,22 @@
+{
+  "name": "game",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "node test/run.cjs",
+    "test:live": "node test/run.cjs --live",
+    "validate:config": "node tools/validate-config.cjs",
+    "docs:effects": "node tools/build-effect-docs.cjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "jsdom": "^30.1.1"
+  }
+}

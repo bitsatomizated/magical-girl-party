@@ -1,5 +1,5 @@
 // 数据层：与 docs/设计文档-05 样板实体、docs/设计文档-06 卡池与筹码对应
-// 注：data/samples/*.json 为同源数据（JSON 为准），此处内嵌以支持 file:// 直接打开
+// 运行规则以本文件为准；data/samples/*.json 是设计样例，不参与加载。
 window.GAME_DATA = {};
 
 // ---- 战斗牌（战斗阶段，消耗战斗点数；随机数值牌打出时掷点）----
@@ -23,7 +23,7 @@ GAME_DATA.cards = {
   laser:    { id: "laser",    name: "激光",     type: "effect", kind: "damage", range: 6, dmg: 3,       desc: "6 格内一个怪物受 3 点伤害" },
   demo:     { id: "demo",     name: "定向爆破", type: "effect", kind: "damage", range: 6, dmg: 4, aoe: 2, desc: "6 格内一个怪物及其周围 2 格内怪物各受 4 点伤害" },
   hurry:    { id: "hurry",    name: "加急加快", type: "effect", kind: "moveMod", doubleDice: true,        desc: "下次移动掷两个骰子" },
-  dirChoose:{ id: "dirChoose",name: "方向抉择", type: "effect", kind: "moveMod", chooseDir: true,         desc: "下次移动自选方向" },
+  dirChoose:{ id: "dirChoose",name: "方向抉择", type: "effect", kind: "moveMod", chooseDir: true,         desc: "下次移动首步自选方向（可掉头），后续不能掉头" },
   diceCtrl: { id: "diceCtrl", name: "遥控骰子", type: "effect", kind: "moveMod", fixedDice: true,         desc: "选择 1~6 的数字，下次移动固定走该点数" },
   king:     { id: "king",     name: "王之力",   type: "effect", kind: "buff", hpCost: 4, atk: 5, turns: 3, desc: "失去 4 生命，3 回合攻击 +5" },
   berserk:  { id: "berserk",  name: "狂暴",     type: "effect", kind: "buff", atk: 3, dmgTaken: 1, turns: 2, desc: "2 回合攻击 +3，受到伤害 +1" },
@@ -82,6 +82,7 @@ GAME_DATA.chips = {
 GAME_DATA.characters = {
   char_anye: {
     id: "char_anye", name: "安叶",
+    starGrowth: { 1: { def: 1, hp: 2, speed: 1 }, 2: { speed: 2 }, 3: { atk: 2, speed: 2 } },
     art: { full: "assets/chars/char_anye_full.jpg" },
     hpMax: 20, attack: 1, defense: 2,
     move: { dice: 1, faces: 10 },
@@ -89,32 +90,34 @@ GAME_DATA.characters = {
     activeSkill: { name: "青鸾雏焰", cooldown: 3,
       desc: "本回合移动速度 +2；本次移动经过的节点均被青焰环绕（含起点与终点），持续到下回合开始，敌人经过青焰地块受到 2 点伤害",
       effect: "azureFlame", value: 2, moveBonus: 2 },
-    passiveSkill: { name: "凤凰再生", trigger: "onLethalDamage",
+    passiveSkill: { name: "凤凰再生",
       desc: "即将被击倒时免疫该伤害，失去 4 点最大生命并回满，青焰伤害永久 +1；发动三次后失效",
-      effect: "phoenixReborn", value: 4, maxCharges: 3 },
+      effect: "phoenixReborn", value: 4, maxCharges: 3, flameGrowth: 1 },
   },
   char_pixel_meow: {
     id: "char_pixel_meow", name: "像素喵喵",
+    starGrowth: { 1: { atk: 2, speed: 1 }, 2: { atk: 2, speed: 2 }, 3: { atk: 3, speed: 2 } },
     // 立绘：单张全身图，头像处由 CSS 圆形裁剪生成缩略；替换素材时同步此处路径
     art: { full: "assets/chars/char_pixel_meow_full.webp" },
     hpMax: 20, attack: 3, defense: 1,
     move: { dice: 1, faces: 10 },
     initialCoins: 12,
     activeSkill: { name: "像素化", cooldown: 3, desc: "本回合攻击力+4，且不会被怪物主动攻击，持续到下回合开始", effect: "pixelate", value: 4 },
-    passiveSkill: { name: "喵之追猎", trigger: "onMonsterPass", desc: "被怪物路过时，对怪物施加 1 层【追猎】；攻击带【追猎】的敌人时攻击力+3；击倒带【追猎】的敌人后，随机抽取 1 张战斗牌", effect: "huntOnPass", value: 3 },
+    passiveSkill: { name: "喵之追猎", desc: "被怪物路过时，对怪物施加 1 层【追猎】；攻击带【追猎】的敌人时攻击力+3；击倒带【追猎】的敌人后，随机抽取 1 张战斗牌", effect: "huntOnPass", value: 3, stacks: 1, drawOnKill: true, consumeOnAttack: false },
   },
   char_rococo: {
     id: "char_rococo", name: "洛可可",
+    starGrowth: { 1: { def: 1, hp: 2, speed: 1 }, 2: { speed: 2 }, 3: { atk: 2, speed: 2 } },
     art: { full: "assets/chars/char_rococo_full.png" },
     hpMax: 20, attack: 2, defense: 2,
     move: { dice: 1, faces: 10 },
     initialCoins: 12,
     activeSkill: { name: "甜品登场", cooldown: 3,
       desc: "指定 3 格内一个地块，生成一个甜品使魔；所有甜品使魔的最大生命 +2、攻击力 +1（全局生效，含此后生成的）",
-      effect: "sweetDeploy" },
-    passiveSkill: { name: "治愈魔法", trigger: "onAllyPass",
+      effect: "sweetDeploy", summon: "dessert_familiar", range: 3, growth: { atk: 1, hp: 2 } },
+    passiveSkill: { name: "治愈魔法",
       desc: "路过甜品使魔时，回复其 5 点生命，并使该甜品使魔下次移动速度 +3",
-      effect: "healingPass", value: 5 },
+      effect: "healingPass", value: 5, moveBonus: 3, targets: ["dessert_familiar"] },
   },
 };
 
@@ -137,8 +140,8 @@ GAME_DATA.monsters = {
                crazy:     { hpMax: 24, attack: 5 },
              },
              passives: [
-               { name: "女仆链接", desc: "经过其他敌人时，使其下次移动速度 +2（精英/BOSS 为 +4）", effect: "maidLink", minDiff: "nightmare" },
-               { name: "晕彩救援", desc: "生命低于30%（向下取整）时，晕彩在升星点登场（限一次）", effect: "yuncaiRescue", threshold: 0.3 },
+               { name: "女仆链接", desc: "经过其他敌人时，使其下次移动速度 +2（精英/BOSS 为 +4）", effect: "maidLink", minDiff: "nightmare", moveByCategory: { minion: 2, default: 4 } },
+               { name: "晕彩救援", desc: "生命低于30%（向下取整）时，晕彩在升星点登场（限一次）", effect: "yuncaiRescue", threshold: 0.3, summon: "maid_yuncai", tileType: "upgrade", onceKey: "yuncaiRescued" },
              ] },
   // 精英2：主动攻击、不反击；主动技「映霞」回合触发全图射击；被动「骑士守护」经过缇娜时生效
   maid_sutaoyao: { id: "maid_sutaoyao", name: "女仆苏桃夭", category: "elite", hpMax: 18, attack: 3, defense: 3,
@@ -151,9 +154,9 @@ GAME_DATA.monsters = {
              },
              skill: { name: "映霞", cooldown: 3, effect: "yuxiaShot",
                       desc: "回合开始时对全图的你远程射击，造成 3 点伤害（噩梦/疯狂难度下，场上每有一名精英或 BOSS 再 +1）",
-                      value: 3 },
+                      value: 3, bonusPerStrong: { normal: 0, hard: 0, nightmare: 1, crazy: 1 }, strongCategories: ["elite", "boss"] },
              passives: [
-               { name: "骑士守护", desc: "经过女仆缇娜时，恢复其3点生命并使其下次战斗攻防+3", effect: "knightGuard" },
+               { name: "骑士守护", desc: "经过女仆缇娜时，恢复其3点生命并使其下次战斗攻防+3", effect: "knightGuard", targets: ["maid_tina"], heal: 3, atk: 3, def: 3 },
              ] },
   // 精英3：主动攻击、会反击；「鲜血汲取」攻击回复等量生命；「公主关注」经过苏桃夭刷新其技能CD
   maid_tina: { id: "maid_tina", name: "女仆缇娜", category: "elite", hpMax: 22, attack: 4, defense: 2,
@@ -165,8 +168,8 @@ GAME_DATA.monsters = {
                crazy:     { hpMax: 36, attack: 6 },
              },
              passives: [
-               { name: "鲜血汲取", desc: "攻击玩家后，恢复等同于造成伤害的生命值", effect: "bloodDrain" },
-               { name: "公主关注", desc: "经过女仆苏桃夭时，刷新其主动技能CD", effect: "princessFocus" },
+               { name: "鲜血汲取", desc: "攻击玩家后，恢复等同于造成伤害的生命值", effect: "bloodDrain", ratio: 1 },
+               { name: "公主关注", desc: "经过女仆苏桃夭时，刷新其主动技能CD", effect: "princessFocus", targets: ["maid_sutaoyao"] },
              ] },
   // BOSS：由安若素「晕彩救援」刷出（本图无固定BOSS格），可移动；主动技「析光」生成可行动的分身
   maid_yuncai: { id: "maid_yuncai", name: "女仆晕彩", category: "boss", hpMax: 77, attack: 4, defense: 2,
@@ -177,7 +180,7 @@ GAME_DATA.monsters = {
                nightmare: { hpMax: 122, attack: 5 },
                crazy:     { hpMax: 144, attack: 6 },
              },
-             skill: { name: "析光", cooldown: 3, effect: "lightSplit",
+             skill: { name: "析光", cooldown: 3, effect: "lightSplit", summon: "maid_yuncai_clone", copyStats: ["atk", "def_"],
                       desc: "回合开始生成一个晕彩分身（分身于本体行动后行动）" } },
   // 晕彩分身：攻防复制生成时本体数值；无技能；击败掉落 8 金币；与小怪一样按编号区分
   maid_yuncai_clone: { id: "maid_yuncai_clone", name: "晕彩分身", category: "elite", numbered: true, hpMax: 10, attack: 4, defense: 2,
@@ -242,7 +245,7 @@ GAME_DATA.monsters = {
   lab_thunderbird: { id: "lab_thunderbird", name: "卡牌·雷鸟", category: "elite", hpMax: 8, attack: 3, defense: 2,
              art: { full: "assets/chars/elite_lab_thunderbird_full.png" },
              move: { steps: 3 }, coinDrop: 8, tags: ["passive", "counter"], numbered: true,
-             passives: [ { name: "掠影", desc: "移动经过你时，造成等同于自身攻击力的伤害", effect: "passDamage" } ],
+             passives: [ { name: "掠影", desc: "移动经过你时，造成等同于自身攻击力的伤害", effect: "passDamage", multiplier: 1 } ],
              diffStats: {
                hard:      { hpMax: 9 },
                nightmare: { hpMax: 10, attack: 4 },
@@ -264,7 +267,7 @@ GAME_DATA.monsters = {
              skill: { name: "魔物增生", cooldown: 2, effect: "spawnAround", mob: "lab_wander", count: 2, radius: 2,
                       desc: "在自身周围 2 格内随机生成 2 只游荡魔物" },
              // 普通/困难：每 2 只 +1 攻击；噩梦/疯狂：每只 +1
-             passives: [ { name: "万魔之王", desc: "自己移动到游荡魔物所在格时将其吸收并永久提升攻击力（普通/困难每 2 只 +1，噩梦/疯狂每只 +1）；小怪路过它不会被吃掉", effect: "devourMinions", atkPer: 1, perCount: { normal: 2, hard: 2, nightmare: 1, crazy: 1 } } ],
+             passives: [ { name: "万魔之王", desc: "自己移动到游荡魔物所在格时将其吸收并永久提升攻击力（普通/困难每 2 只 +1，噩梦/疯狂每只 +1）；小怪路过它不会被吃掉", effect: "devourMinions", targets: ["lab_wander"], atkPer: 1, perCount: { normal: 2, hard: 2, nightmare: 1, crazy: 1 } } ],
              diffStats: {
                hard:      { hpMax: 30 },
                nightmare: { hpMax: 32, attack: 3 },

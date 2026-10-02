@@ -1,8 +1,5 @@
-# 站点发布不需要的文件：本地测试依赖与测试脚本
+# 依赖可由 package-lock.json 重建；测试和依赖声明随源码版本管理
 node_modules/
-test/
-package.json
-package-lock.json
 
 # 编辑器与系统垃圾
 .vscode/
