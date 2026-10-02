@@ -1224,15 +1224,28 @@ window.Engine = (() => {
     const a = { uid: ++S.allySeq, def, name: `${def.name}${S.allySeq}`, pos,
       hp: def.hpMax, hpMax: def.hpMax,
       atk: def.attack + (S.famAtkBonus || 0), def: def.defense,
-      nextMoveBonus: 0 };
+      nextMoveBonus: 0, firstStep: null }; // firstStep：登场时玩家指定的初始移动方向
     S.allies.push(a);
     return a;
   }
 
-  // 甜品登场选点结算：生成使魔，并给全体使魔（含此后生成的）攻击力永久 +2
+  // 甜品登场两段瞄准：
+  //   deploy    阶段——选择登场地块，生成使魔并给全体使魔（含此后生成的）攻击力永久 +2
+  //   deployDir 阶段——点击登场格的相邻地块，确定使魔的初始移动方向
   function chooseDeployTile(pos) {
     const t = S.targeting;
-    if (!t || !t.deploy || !t.candidates.includes(pos)) return;
+    if (!t || !t.candidates.includes(pos)) return;
+    if (t.deployDir) {
+      const a = t.ally;
+      S.targeting = null;
+      if (a && S.allies.includes(a)) {
+        a.firstStep = pos;
+        log(`【${a.name}】的初始移动方向已确定。`, "good");
+      }
+      window.UI.renderAll();
+      return;
+    }
+    if (!t.deploy) return;
     S.targeting = null;
     S.famAtkBonus = (S.famAtkBonus || 0) + 2;
     S.allies.forEach(a => { a.atk += 2; });
@@ -1240,6 +1253,9 @@ window.Engine = (() => {
     const p = D.player.activeSkill;
     S.player.skillCd = p.cooldown;
     log(`【${p.name}】发动：【${a.name}】在第 ${pos} 格登场！所有甜品使魔攻击力永久 +2（现 ${a.atk}）。`, "good");
+    // 第二段：初始方向选择（候选 = 登场格的全部邻格；取消则由使魔自行追击）
+    S.targeting = { deployDir: true, ally: a, candidates: S.adj[pos].slice(), cardName: p.name };
+    log(`请点击相邻地块，确定【${a.name}】的初始移动方向。`);
     window.UI.renderAll();
   }
 
@@ -1335,7 +1351,9 @@ window.Engine = (() => {
       if (!opts.length) break;
       const target = nearestMonster(a.pos);
       let next;
-      if (target) {
+      if (a.firstStep != null && S.adj[a.pos].includes(a.firstStep)) {
+        next = a.firstStep; a.firstStep = null; // 登场时玩家指定的初始方向（仅首步）
+      } else if (target) {
         next = opts[0];
         let bd = graphDist(next, target.pos);
         for (const o of opts) { const d = graphDist(o, target.pos); if (d < bd) { bd = d; next = o; } }

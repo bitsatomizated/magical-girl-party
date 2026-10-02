@@ -187,7 +187,7 @@ window.UI = (() => {
       ).join("<br>") + `</div>`;
     }
     html += `<div class="info-sec"><b>怪物图鉴</b><br><span class="info-hint">棋盘上怪物条目：名字 生命 攻/防 + 状态（▮=标记 追=追猎 CD=技能冷却）</span>`;
-    const candIds = (S.targeting && !S.targeting.deploy) ? S.targeting.candidates : null;
+    const candIds = (S.targeting && !S.targeting.deploy && !S.targeting.deployDir) ? S.targeting.candidates : null;
     const GD = window.GAME_DATA;
     const RANK = { normal: 0, hard: 1, nightmare: 2, crazy: 3 };
     const curRank = RANK[GD.diff] ?? 0;
@@ -327,8 +327,8 @@ window.UI = (() => {
           `<circle cx="${p.x}" cy="${p.y}" r="40" class="move-ring"/>` +
           `<circle cx="${p.x}" cy="${p.y}" r="44" fill="transparent"/></g>`;
       }
-      // 甜品登场：3 格内的候选地块高亮，点击放置使魔
-      if (S.targeting && S.targeting.deploy && S.targeting.candidates.includes(i)) {
+      // 甜品登场（部署/初始方向）：候选地块高亮，点击确认
+      if (S.targeting && (S.targeting.deploy || S.targeting.deployDir) && S.targeting.candidates.includes(i)) {
         svg += `<g class="deploy-choice" data-pos="${i}" style="cursor:pointer">` +
           `<circle cx="${p.x}" cy="${p.y}" r="40" class="deploy-ring"/>` +
           `<circle cx="${p.x}" cy="${p.y}" r="44" fill="transparent"/></g>`;
@@ -366,7 +366,7 @@ window.UI = (() => {
       });
       // 瞄准模式：候选怪物按「目标编号」逐个标出（同格多怪水平排开，避免标记重叠、便于精确锁怪）
       // 甜品登场的瞄准对象是地块不是怪物，跳过（candidates 是地块编号，与怪物 uid 数值可能重叠）
-      if (S.targeting && !S.targeting.deploy) {
+      if (S.targeting && !S.targeting.deploy && !S.targeting.deployDir) {
         const candIds = S.targeting.candidates;
         const cand = S.monsters.filter(m => candIds.includes(m.uid) && m.hp > 0);
         const byTile = {};
@@ -419,6 +419,8 @@ window.UI = (() => {
       if (S.targeting) {
         if (S.targeting.deploy) {
           addButton(act, `🍰 ${S.targeting.cardName}：点击棋盘绿色高亮地块放置甜品使魔`, () => {}, "", true);
+        } else if (S.targeting.deployDir) {
+          addButton(act, `🍰 ${S.targeting.cardName}：点击相邻地块，确定使魔的初始移动方向`, () => {}, "", true);
         } else {
           addButton(act, `🎯 瞄准中：${S.targeting.cardName}（点棋盘编号标记或右侧怪物条目锁怪）`, () => {}, "", true);
         }
