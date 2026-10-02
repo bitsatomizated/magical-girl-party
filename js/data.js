@@ -266,9 +266,9 @@ GAME_DATA.monsters = {
              // 普通/困难：每 2 只 +1 攻击；噩梦/疯狂：每只 +1
              passives: [ { name: "万魔之王", desc: "自己移动到游荡魔物所在格时将其吸收并永久提升攻击力（普通/困难每 2 只 +1，噩梦/疯狂每只 +1）；小怪路过它不会被吃掉", effect: "devourMinions", atkPer: 1, perCount: { normal: 2, hard: 2, nightmare: 1, crazy: 1 } } ],
              diffStats: {
-               hard:      { hpMax: 40 },
-               nightmare: { hpMax: 42, attack: 3 },
-               crazy:     { hpMax: 46, attack: 4 },
+               hard:      { hpMax: 30 },
+               nightmare: { hpMax: 32, attack: 3 },
+               crazy:     { hpMax: 36, attack: 4 },
              } },
   // 魔法少女·变彩（BOSS）：驻守不动、不主动攻击、不反击；每 2 回合把两只游荡魔物融合成一只一级精英
   lab_variant: { id: "lab_variant", name: "魔法少女·变彩", category: "boss", hpMax: 66, attack: 4, defense: 3,
