@@ -1881,7 +1881,7 @@ window.Engine = (() => {
       fireRoundStartEffects, spawnSpotsFor, tilesOf, defeatMonster,
       // 洛可可 / 甜品使魔（rococo-test 专用）
       spawnFamiliar, stepAlly, allyStrike, monsterStrikeAlly, defeatMonsterByAlly, allyTurns, healPassAllies,
-      battlePoolNow,
+      battlePoolNow, drawCard,
     },
     get state() { return S; },
   };
