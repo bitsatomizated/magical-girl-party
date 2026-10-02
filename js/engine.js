@@ -1172,6 +1172,8 @@ window.Engine = (() => {
     const enemyDef = effDef(t); // 骑士守护的临时防御与光环加成都计入本次防守
     t.nextBattleAtk = 0; t.nextBattleDef = 0; // 「下次战斗」仅生效一次，反击是另一场战斗
     let dmg;
+    // 全力攻击：攻击力先 ×1.5 再进入对拼（减防发生在乘法之后），高防目标同样吃满加成
+    if (b.finalMult > 1) { atk = Math.floor(atk * b.finalMult); log(`【全力攻击】攻击结算 ×${b.finalMult} → 攻击 ${atk}！`, "battle"); }
     if (stance === "dodge") {
       const ok = pRoll >= mRoll;
       if (ok) { log(`闪避成功（${pRoll} vs ${mRoll}）：未造成伤害。`, "battle"); dmg = 0; }
@@ -1180,7 +1182,6 @@ window.Engine = (() => {
       dmg = Math.max(1, atk + pRoll - (enemyDef + mRoll));
       log(`对拼：我方 ${atk}+${pRoll} vs 敌方 ${enemyDef}+${mRoll}（防御姿态）`);
     }
-    if (dmg > 0 && b.finalMult > 1) { dmg = Math.floor(dmg * b.finalMult); log(`【全力攻击】最终结算 ×${b.finalMult} → ${dmg} 点！`, "battle"); }
     if (dmg > 0) { dealToMonster(t, dmg); onHitEnemy(t); } // 命中词条只认战斗攻击：出牌伤害与青焰伤害不触发
     // 反击：目标存活且有 counter 标签 → 立即进入一次完整的「怪物攻击」战斗
     // （与怪物主动攻击同流程：玩家选姿态、打出防御牌、双方掷骰后结算）
