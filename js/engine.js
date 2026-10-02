@@ -1321,14 +1321,16 @@ window.Engine = (() => {
     const rescue = m.def.passives?.find(p => p.effect === "yuncaiRescue");
     if (rescue && (m.hp <= 0 || m.hp < Math.floor(m.hpMax * rescue.threshold))) tryYuncaiRescue();
     if (m.hp <= 0) return;
-    // 怪物还手：同样自动结算
-    const cRoll = d6(), fRoll = d6();
-    const cdmg = Math.max(1, effAtk(m) + cRoll - (a.def + fRoll));
-    a.hp -= cdmg;
-    log(`【${m.name}】还手：【${a.name}】受到 ${cdmg} 点伤害（剩 ${Math.max(0, a.hp)}）。`, "warn");
-    if (a.hp <= 0) {
-      S.allies = S.allies.filter(x => x !== a);
-      log(`【${a.name}】被击碎了……`, "warn");
+    // 怪物还手：与玩家攻击同一规则，仅带 counter 标签的怪物会反击
+    if (m.def.tags.includes("counter")) {
+      const cRoll = d6(), fRoll = d6();
+      const cdmg = Math.max(1, effAtk(m) + cRoll - (a.def + fRoll));
+      a.hp -= cdmg;
+      log(`【${m.name}】还手：【${a.name}】受到 ${cdmg} 点伤害（剩 ${Math.max(0, a.hp)}）。`, "warn");
+      if (a.hp <= 0) {
+        S.allies = S.allies.filter(x => x !== a);
+        log(`【${a.name}】被击碎了……`, "warn");
+      }
     }
   }
 
