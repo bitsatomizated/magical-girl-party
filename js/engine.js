@@ -974,12 +974,12 @@ window.Engine = (() => {
     return false;
   }
 
-  // 升级树：1星+1攻+2血上限+2移速；2星+2攻+2移速；3星+2攻+2移速（每星固定 +2 移速，节奏随投资推进）
+  // 升级树：1星+1攻+2血上限+1移速；2星+2攻+2移速；3星+2攻+2移速（累计移速 +5，节奏随投资推进）
   function applyStarGrowth(star) {
     const P = S.player;
     S.chipRefreshLeft = (S.chipRefreshLeft || 0) + 1;
-    P.speedBonus += 2;
-    log(`筹码刷新次数 +1，移动速度 +2（永久，现 +${P.speedBonus}）。`);
+    P.speedBonus += (star === 1 ? 1 : 2);
+    log(`筹码刷新次数 +1，移动速度 +${star === 1 ? 1 : 2}（永久，现 +${P.speedBonus}）。`);
     if (star === 1) { P.atk += 1; P.hpMax += 2; P.hp += 2; log(`升级！当前 ${star} 星：攻击+1，血上限+2。`, "good"); }
     else if (star === 2) { P.atk += 2; log(`升级！当前 ${star} 星：攻击+2。`, "good"); }
     else if (star === 3) { P.atk += 2; log(`升级！当前 ${star} 星：攻击+2。`, "good"); }
