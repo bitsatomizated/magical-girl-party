@@ -109,18 +109,18 @@ GAME_DATA.characters = {
     hpMax: 20, attack: 2, defense: 2,
     move: { dice: 1, faces: 10 },
     initialCoins: 12,
-    activeSkill: { name: "甜品登场", cooldown: 2,
+    activeSkill: { name: "甜品登场", cooldown: 3,
       desc: "指定 3 格内一个地块，生成一个甜品使魔；所有甜品使魔的最大生命与攻击力永久 +2（全局生效，含此后生成的）",
       effect: "sweetDeploy" },
     passiveSkill: { name: "治愈魔法", trigger: "onAllyPass",
-      desc: "路过甜品使魔时，自身与其各回复 2 生命，并使该甜品使魔下次移动速度 +3",
-      effect: "healingPass", value: 2 },
+      desc: "路过甜品使魔时，回复其 5 点生命，并使该甜品使魔下次移动速度 +3",
+      effect: "healingPass", value: 5 },
   },
 };
 
 // ---- 友方召唤物（不属于怪物：玩家无法攻击，敌人可以攻击）----
 GAME_DATA.allies = {
-  dessert_familiar: { id: "dessert_familiar", name: "甜品使魔", hpMax: 16, attack: 3, defense: 3,
+  dessert_familiar: { id: "dessert_familiar", name: "甜品使魔", hpMax: 20, attack: 3, defense: 3,
     move: { dice: 1, faces: 10 },
     desc: "主动追击最近的怪物，攻击所有自己路过的怪物；其攻击不触发任何筹码效果，击倒的怪物视为玩家击倒" },
 };

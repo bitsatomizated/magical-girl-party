@@ -1284,14 +1284,13 @@ window.Engine = (() => {
   }
 
   // 治愈魔法：玩家路过甜品使魔所在格时触发（途经与落格均算路过）
+  // 只回复使魔，不回复玩家自身
   function healPassAllies(pos) {
     if (D.player.passiveSkill?.effect !== "healingPass") return;
-    const P = S.player;
+    const heal = D.player.passiveSkill.value || 5;
     (S.allies || []).forEach(a => {
       if (a.hp <= 0 || a.pos !== pos) return;
-      const ph = Math.min(2, P.hpMax - P.hp);
-      if (ph > 0) { P.hp += ph; log(`【治愈魔法】：回复 ${ph} 生命（现 ${P.hp}/${P.hpMax}）。`, "good"); }
-      const ah = Math.min(2, a.hpMax - a.hp);
+      const ah = Math.min(heal, a.hpMax - a.hp);
       if (ah > 0) { a.hp += ah; log(`【治愈魔法】：【${a.name}】回复 ${ah} 生命（现 ${a.hp}/${a.hpMax}）。`, "good"); }
       a.nextMoveBonus = 3; // 覆盖：同回合反复路过仍为 +3
       log(`【治愈魔法】：【${a.name}】下次移动速度 +3。`);
