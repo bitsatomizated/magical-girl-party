@@ -87,8 +87,8 @@ GAME_DATA.characters = {
     move: { dice: 1, faces: 10 },
     initialCoins: 12,
     activeSkill: { name: "青鸾雏焰", cooldown: 3,
-      desc: "本回合移动速度 +3；本次移动经过的节点均被青焰环绕（含起点与终点），持续到下回合开始，敌人经过青焰地块受到 1 点伤害",
-      effect: "azureFlame", value: 1 },
+      desc: "本回合移动速度 +2；本次移动经过的节点均被青焰环绕（含起点与终点），持续到下回合开始，敌人经过青焰地块受到 2 点伤害",
+      effect: "azureFlame", value: 2, moveBonus: 2 },
     passiveSkill: { name: "凤凰再生", trigger: "onLethalDamage",
       desc: "即将被击倒时免疫该伤害，失去 4 点最大生命并回满，青焰伤害永久 +1；发动三次后失效",
       effect: "phoenixReborn", value: 4, maxCharges: 3 },
@@ -103,6 +103,26 @@ GAME_DATA.characters = {
     activeSkill: { name: "像素化", cooldown: 3, desc: "本回合攻击力+4，且不会被怪物主动攻击，持续到下回合开始", effect: "pixelate", value: 4 },
     passiveSkill: { name: "喵之追猎", trigger: "onMonsterPass", desc: "被怪物路过时，对怪物施加 1 层【追猎】；攻击带【追猎】的敌人时攻击力+3；击倒带【追猎】的敌人后，随机抽取 1 张战斗牌", effect: "huntOnPass", value: 3 },
   },
+  char_rococo: {
+    id: "char_rococo", name: "洛可可",
+    art: { full: "assets/chars/char_rococo_full.png" },
+    hpMax: 20, attack: 2, defense: 2,
+    move: { dice: 1, faces: 10 },
+    initialCoins: 12,
+    activeSkill: { name: "甜品登场", cooldown: 3,
+      desc: "指定 3 格内一个地块，生成一个甜品使魔；所有甜品使魔的攻击力永久 +2（全局生效，含此后生成的）",
+      effect: "sweetDeploy" },
+    passiveSkill: { name: "治愈魔法", trigger: "onAllyPass",
+      desc: "路过甜品使魔时，自身与其各回复 2 生命，并使该甜品使魔下次移动速度 +3",
+      effect: "healingPass", value: 2 },
+  },
+};
+
+// ---- 友方召唤物（不属于怪物：玩家无法攻击，敌人可以攻击）----
+GAME_DATA.allies = {
+  dessert_familiar: { id: "dessert_familiar", name: "甜品使魔", hpMax: 16, attack: 3, defense: 3,
+    move: { dice: 1, faces: 10 },
+    desc: "主动追击最近的怪物，攻击所有自己路过的怪物；其攻击不触发任何筹码效果，击倒的怪物视为玩家击倒" },
 };
 
 GAME_DATA.monsters = {
@@ -205,6 +225,67 @@ GAME_DATA.monsters = {
                hard:      { hpMax: 45, attack: 4, defense: 3 },
                nightmare: { hpMax: 66, attack: 5, defense: 4 },
                crazy:     { hpMax: 90, attack: 6, defense: 5 },
+             } },
+
+  // ---- 卡牌实验室：融合流水线（设计文档 08）----
+  // 游荡魔物：主动攻击、不反击；两只相遇即互相吸收，随机进化成一只一级精英
+  lab_wander: { id: "lab_wander", name: "游荡魔物", category: "minion", hpMax: 5, attack: 3, defense: 0,
+             art: { full: "assets/chars/mob_lab_wander_full.png" },
+             move: { steps: 1 }, coinDrop: 4, tags: ["aggressive"],
+             passives: [ { name: "吸收进化", desc: "移动到另一只游荡魔物所在格时互相吸收，随机进化成卡牌·雷鸟或卡牌·三头犬（满血、当回合停下）", effect: "devourMinion", into: ["lab_thunderbird", "lab_cerberus"] } ],
+             diffStats: {
+               hard:      { hpMax: 5,  attack: 3 },
+               nightmare: { hpMax: 6,  attack: 4 },
+               crazy:     { hpMax: 7,  attack: 4 },
+             } },
+  // 卡牌·雷鸟：不主动攻击、但会反击；移速 3（基础 1 + 被动 2），掠过玩家即造成自身攻击力的伤害
+  lab_thunderbird: { id: "lab_thunderbird", name: "卡牌·雷鸟", category: "elite", hpMax: 8, attack: 3, defense: 2,
+             art: { full: "assets/chars/elite_lab_thunderbird_full.png" },
+             move: { steps: 3 }, coinDrop: 8, tags: ["passive", "counter"], numbered: true,
+             passives: [ { name: "掠影", desc: "移动经过你时，造成等同于自身攻击力的伤害", effect: "passDamage" } ],
+             diffStats: {
+               hard:      { hpMax: 9 },
+               nightmare: { hpMax: 10, attack: 4 },
+               crazy:     { hpMax: 12, attack: 4 },
+             } },
+  // 卡牌·三头犬：主动攻击 + 反击，无技能
+  lab_cerberus: { id: "lab_cerberus", name: "卡牌·三头犬", category: "elite", hpMax: 10, attack: 4, defense: 3,
+             art: { full: "assets/chars/elite_lab_cerberus_full.png" },
+             move: { steps: 1 }, coinDrop: 8, tags: ["aggressive", "counter"], numbered: true,
+             diffStats: {
+               hard:      { hpMax: 11 },
+               nightmare: { hpMax: 12, attack: 5 },
+               crazy:     { hpMax: 14, attack: 5 },
+             } },
+  // 奇美拉：二级精英；每 2 回合在周围增生 2 只游荡魔物，并吸收同格游荡魔物永久 +1 攻击
+  lab_chimera: { id: "lab_chimera", name: "奇美拉", category: "elite", hpMax: 38, attack: 2, defense: 4,
+             art: { full: "assets/chars/elite_lab_chimera_full.png" },
+             move: { steps: 1 }, coinDrop: 16, tags: ["aggressive", "counter"], numbered: true,
+             skill: { name: "魔物增生", cooldown: 2, effect: "spawnAround", mob: "lab_wander", count: 2, radius: 2,
+                      desc: "在自身周围 2 格内随机生成 2 只游荡魔物" },
+             // 普通/困难：每 2 只 +1 攻击；噩梦/疯狂：每只 +1
+             passives: [ { name: "万魔之王", desc: "自己移动到游荡魔物所在格时将其吸收并永久提升攻击力（普通/困难每 2 只 +1，噩梦/疯狂每只 +1）；小怪路过它不会被吃掉", effect: "devourMinions", atkPer: 1, perCount: { normal: 2, hard: 2, nightmare: 1, crazy: 1 } } ],
+             diffStats: {
+               hard:      { hpMax: 40 },
+               nightmare: { hpMax: 42, attack: 3 },
+               crazy:     { hpMax: 46, attack: 4 },
+             } },
+  // 魔法少女·变彩（BOSS）：驻守不动、不主动攻击、不反击；每 2 回合把两只游荡魔物融合成一只一级精英
+  lab_variant: { id: "lab_variant", name: "魔法少女·变彩", category: "boss", hpMax: 66, attack: 4, defense: 3,
+             art: { full: "assets/chars/boss_variant_full.jpg" },
+             move: { steps: 0, stationary: true }, coinDrop: 0, tags: ["boss"],
+             skill: { name: "卡牌融合", cooldown: 2, effect: "fuseMinions", radius: 2,
+                      // 由低到高取第一个素材足够的档位：优先两只游荡魔物 → 一只一级精英；小怪不足两只时才动用精英档
+                      tiers: [
+                        { from: ["lab_wander"], count: 2, into: ["lab_thunderbird", "lab_cerberus"] },
+                        { from: ["lab_thunderbird", "lab_cerberus"], count: 2, into: ["lab_chimera"] },
+                      ],
+                      desc: "优先把两只游荡魔物融合成一只一级精英；场上小怪不足两只时，才把两只一级精英合成奇美拉。产物落在自身周围 2 格内" },
+             passives: [ { name: "卡牌守护", desc: "场上每存在一只其他怪物，自身攻防 +1（动态结算，清怪会立刻削弱它）", effect: "bossAura", atkPer: 1, defPer: 1 } ],
+             diffStats: {
+               hard:      { hpMax: 72 },
+               nightmare: { hpMax: 77, attack: 5 },
+               crazy:     { hpMax: 88, attack: 5 },
              } },
 };
 
@@ -341,6 +422,80 @@ GAME_DATA.maps = {
       { desc: "击败女仆精灵 9 只", targets: ["maid_sprite"], need: 9, rewardTier: 2 },
       { desc: "击败女仆苏桃夭与女仆缇娜", targets: ["maid_sutaoyao", "maid_tina"], need: 2, rewardTier: 3, extra: "roundProgressMinus1" },
       { desc: "击败晕彩分身 2 个", targets: ["maid_yuncai_clone"], need: 2, rewardTier: 2 },
+    ],
+  },
+  // 卡牌实验室（第二张正式图·横置的「目」）：外框 7×8 单环 + 两条内部竖列（x=2、x=4），共 38 格
+  // 三个腔室各跨 2 格，关于中轴 x=3 左右对称；地块类型按镜像（x ↔ 6-x）成对分布，只有中轴上的起始点与 BOSS 位独自成格
+  // 四个三岔口：2 在 (2,0)、4 在 (4,0)、17 在 (2,7)、15 在 (4,7)
+  // 卡牌实验室：融合流水线地图。敌人全部由 globalEvents 按轮次投放（开局空场），
+  // 怪物阵容、吸收与融合机制见《设计文档 08》
+  card_lab: {
+    id: "card_lab",
+    name: "卡牌实验室",
+    intro: "传说邪恶的反派组织【九幽】在L市有一座用于研究卡牌魔物融合的实验室，创造出的卡牌怪物具有超乎想象的战斗力。你在偶然间发现了实验室的位置，于是便打算一探究竟......",
+    rounds: 16,
+    startTile: 3,       // 上边中央 (3,0)：起始点落在对称轴上，才能保持左右地块类型对称
+    initialDir: [1, 0], // 首步向右
+    // 不设 bossTile：变彩由第 1 轮事件「魔物骚动」刷在最下方事件格（16 号），开局布阵完全交给事件
+    bossName: "魔法少女·变彩",
+    bossMob: "lab_variant",
+    initialSpawn: false, // 开局不铺怪：所有敌人由 globalEvents 按轮次投放
+    upgradeCost: (star) => [15, 20, 25][star] ?? null,
+    shopCost: 3,
+    shopOffers: { effect: 2, battle: 1 },
+    chipShopBase: 10, chipShopStep: 5,
+    tiles: [
+      // ---- 外框 0~25（自左上角 (0,0) 顺时针）----
+      { t: "event",    x: 0, y: 0 }, { t: "dash",     x: 1, y: 0 }, { t: "draw",     x: 2, y: 0 }, { t: "start",    x: 3, y: 0 },
+      { t: "draw",     x: 4, y: 0 }, { t: "dash",     x: 5, y: 0 }, { t: "event",    x: 6, y: 0 },
+      { t: "assault",  x: 6, y: 1 }, { t: "draw",     x: 6, y: 2 }, { t: "upgrade",  x: 6, y: 3 }, { t: "chipshop", x: 6, y: 4 },
+      { t: "event",    x: 6, y: 5 }, { t: "heal",     x: 6, y: 6 }, { t: "shop",     x: 6, y: 7 },
+      { t: "dash",     x: 5, y: 7 }, { t: "heal",     x: 4, y: 7 }, { t: "event",    x: 3, y: 7 }, { t: "heal",     x: 2, y: 7 },
+      { t: "dash",     x: 1, y: 7 }, { t: "shop",     x: 0, y: 7 },
+      { t: "heal",     x: 0, y: 6 }, { t: "event",    x: 0, y: 5 }, { t: "chipshop", x: 0, y: 4 }, { t: "upgrade",  x: 0, y: 3 },
+      { t: "draw",     x: 0, y: 2 }, { t: "assault",  x: 0, y: 1 },
+      // ---- 内部竖列 x=2（26~31）----
+      { t: "spawn", mob: "lab_wander", x: 2, y: 1 }, { t: "damage",   x: 2, y: 2 }, { t: "spawn", mob: "lab_wander", x: 2, y: 3 }, { t: "dash",     x: 2, y: 4 },
+      { t: "draw",     x: 2, y: 5 }, { t: "spawn", mob: "lab_wander", x: 2, y: 6 },
+      // ---- 内部竖列 x=4（32~37，与 x=2 列镜像成对）----
+      { t: "spawn", mob: "lab_wander", x: 4, y: 1 }, { t: "damage",   x: 4, y: 2 }, { t: "spawn", mob: "lab_wander", x: 4, y: 3 }, { t: "dash",     x: 4, y: 4 },
+      { t: "draw",     x: 4, y: 5 }, { t: "spawn", mob: "lab_wander", x: 4, y: 6 },
+    ],
+    edges: [
+      // 外框单环（26 条）
+      [0,1],[1,2],[2,3],[3,4],[4,5],[5,6],
+      [6,7],[7,8],[8,9],[9,10],[10,11],[11,12],[12,13],
+      [13,14],[14,15],[15,16],[16,17],[17,18],[18,19],
+      [19,20],[20,21],[21,22],[22,23],[23,24],[24,25],[25,0],
+      // 内部竖列 x=2：上边 2 → (2,6)=31 → 下边 17
+      [2,26],[26,27],[27,28],[28,29],[29,30],[30,31],[31,17],
+      // 内部竖列 x=4：上边 4 → (4,6)=37 → 下边 15
+      [4,32],[32,33],[33,34],[34,35],[35,36],[36,37],[37,15],
+    ],
+    // 四波投放：前期清怪 → 中期抗压 → 后期斩首
+    globalEvents: [
+      { round: 1, name: "魔物骚动", desc: "六只游荡魔物自实验区向上涌出，变彩在最深处登场！",
+        spawns: [
+          { mob: "lab_wander", tiles: "spawn", dir: [0, -1] }, // 6 只，登场方向统一朝上（y 减小，走向玩家起始端）
+          { mob: "lab_variant", tiles: [16] },     // 变彩：最下方事件格 (3,7)
+        ] },
+      { round: 4, name: "群魔乱舞", desc: "六只游荡魔物涌入战场（铺满拿牌格），所有怪物攻击力 +1。",
+        spawns: [ { mob: "lab_wander", tiles: "draw" } ], // 6 只，与拿牌格数量一致（铺满）
+        effect: "allMonstersStats", atk: 1, def: 0 },
+      { round: 9, name: "万魔之王", desc: "一只奇美拉在变彩身旁现身，所有怪物防御力 +1。",
+        spawns: [ { mob: "lab_chimera", tiles: [16] } ],
+        effect: "allMonstersStats", atk: 0, def: 1 },
+      { round: 12, name: "最终爆发", desc: "四只游荡魔物自疾行格冲出，所有怪物攻防 +1。",
+        spawns: [ { mob: "lab_wander", tiles: "dash", count: 4 } ], // 疾行格现有 6 个，只取其中 4 个（外框四角）
+        effect: "allMonstersStats", atk: 1, def: 1 },
+    ],
+    // 任务：奖励"击倒"结果。吸收与融合不产生击倒，因此不会推进任务进度（见《设计文档 08》§3.1）
+    quests: [
+      { desc: "击败游荡魔物 4 只", targets: ["lab_wander"], need: 4, rewardTier: 1 },
+      { desc: "击败游荡魔物 9 只", targets: ["lab_wander"], need: 9, rewardTier: 2 },
+      { desc: "击败卡牌·雷鸟或卡牌·三头犬 2 只", targets: ["lab_thunderbird", "lab_cerberus"], need: 2, rewardTier: 2 },
+      { desc: "击败奇美拉 1 只", targets: ["lab_chimera"], need: 1, rewardTier: 3, extra: "roundProgressMinus1" },
+      { desc: "击败卡牌·雷鸟或卡牌·三头犬 4 只", targets: ["lab_thunderbird", "lab_cerberus"], need: 4, rewardTier: 3 },
     ],
   },
 };

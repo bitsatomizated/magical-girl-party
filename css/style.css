@@ -117,6 +117,7 @@ main { display: flex; height: calc(100vh - 45px); }
 #board .token-p { font-size: 12px; font-weight: bold; fill: #ffd76e; }
 #board .token-m { font-size: 11px; fill: #ff8b8b; }
 #board .token-boss { font-size: 11px; font-weight: bold; fill: #ff4dd2; }
+#board .token-stat { font-size: 9px; fill: #9aa2bd; }
 #board .arr-p { fill: #ffd76e; stroke: #14141f; stroke-width: 1; }
 #board .arr-m { fill: #ff6e6e; stroke: #14141f; stroke-width: 1; }
 #board .arr-boss { fill: #ff4dd2; stroke: #14141f; stroke-width: 1; }
@@ -126,6 +127,9 @@ main { display: flex; height: calc(100vh - 45px); }
 #board .target-idx { fill: #fff; font-size: 18px; font-weight: 700; pointer-events: none; }
 #board .target-hit:hover .target-ring { fill: rgba(255,210,90,.55); stroke: #ffd25a; }
 #board .move-ring { fill: rgba(255,215,110,.22); stroke: #ffd76e; stroke-width: 3; }
+#board .token-ally { font-size: 11px; fill: #5fe08a; }
+#board .deploy-ring { fill: rgba(95,224,138,.22); stroke: #5fe08a; stroke-width: 3; }
+#board .deploy-choice:hover .deploy-ring { fill: rgba(95,224,138,.45); }
 
 #side { width: 452px; border-left: 1px solid #333; display: flex; flex-direction: column; padding: 10px; gap: 8px; background: #191926; overflow-y: auto; }
 
@@ -155,6 +159,7 @@ button.primary { background: #7a3434; border-color: #a55; }
 
 #info { background: #1c2030; border: 1px solid #2c3450; border-radius: 6px; padding: 8px 10px; font-size: 13px; line-height: 1.5; max-height: clamp(200px, 34vh, 340px); overflow-y: auto; }
 #info .info-sec { margin-bottom: 6px; }
+#info .info-hint { color: #8a8fa8; font-size: 11px; }
 #info b { color: #ffd76e; }
 #info .good { color: #bfb; }
 #info .info-mob { border-top: 1px dashed #333; padding-top: 3px; margin-top: 3px; }

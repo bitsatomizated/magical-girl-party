@@ -125,7 +125,7 @@ window.Engine = (() => {
   function derived() {
     const P = S.player;
     let atk = P.atk + chipSum("atk") + buffSum("atk"), def = P.def + chipSum("def"); // buff：王之力/狂暴
-    const speed = (P.speedBonus || 0) + chipSum("speed");
+    const speed = (P.speedBonus || 0) + (P.turnMoveBonus || 0) + chipSum("speed"); // turnMoveBonus：本回合内的临时移速（青鸾雏焰）
     const pts = 3 + P.star + chipSum("point");
     const lowHp = P.hp <= P.hpMax / 2;
     if (lowHp) atk += chipSum("lowHpAtk"); // 不屈 II
@@ -151,7 +151,7 @@ window.Engine = (() => {
         name: p.name, hp: p.hpMax, hpMax: p.hpMax, atk: p.attack, def: p.defense,
         star: 0, coins: p.initialCoins, pos: m.startTile,
         hand: [], chips: [], wealth: 0, regen: 0,
-        skillCd: 0, atkBuffNextBattle: 0, moveBonus: 0, speedBonus: 0, buffs: [],
+        skillCd: 0, atkBuffNextBattle: 0, moveBonus: 0, speedBonus: 0, turnMoveBonus: 0, buffs: [],
         nextDouble: false, nextFixed: 0, nextChooseDir: false,
         flameActive: false,          // 青鸾雏焰：本回合移动铺设青焰（持续到下回合开始的是 S.flames）
         flameBonus: 0,               // 凤凰再生：主动技（青焰）伤害永久加成
@@ -160,6 +160,8 @@ window.Engine = (() => {
         ko: false,
       },
       monsters: [], monsterSeq: 0, defCount: {}, // defCount：同名怪编号计数
+      allies: [], allySeq: 0, // 友方召唤物（甜品使魔等）；与怪物分列，玩家无法攻击
+      famAtkBonus: 0, // 甜品登场：全体甜品使魔攻击力的永久全局加成（新生成的同样生效）
       roundsLimit: m.rounds, // 轮数上限（任务「轮次进度-1」在无法回退时改为延长上限）
       firedRounds: {}, // 已结算过轮次开始效果的轮次：轮次进度回退后再次经过该轮时不得重复刷怪/重复加成
       bossRounds: 0, battle: null, chipPurchases: 0, lastChips: [], chipQueue: [], chipRefreshLeft: 2,
@@ -176,7 +178,7 @@ window.Engine = (() => {
     // 初始怪物：默认开局铺怪 + BOSS 驻守；地图可配 initialSpawn:false（刷怪格空置，踩上才刷）与省略 bossTile（BOSS 由事件刷出）
     if (m.initialSpawn !== false) m.tiles.forEach((t, i) => { if (t.t === "spawn") spawnMonster(t.mob, i); });
     if (m.bossTile != null) {
-      const b = D.monsters.boss;
+      const b = D.monsters[m.bossMob || "boss"]; // 地图可指定驻守 BOSS（默认灾厄核心）
       S.monsters.push(makeMonster(b, m.bossTile));
     }
     log(`地图「${m.name}」：共 ${m.rounds} 轮。击败${m.bossName || "最终 BOSS"}即获胜！`);
@@ -202,6 +204,18 @@ window.Engine = (() => {
       lastFrom: null }; // 上一回合的来路：下回合起步继承（首次移动为 null → 用登场/初始方向）
   }
 
+  // 光环类被动（卡牌守护）：场上每存在一只其他怪物，自身攻防 +1
+  // 动态计算、不写回 m.atk/def_，因此怪多怪少会即时反映，击倒小怪即可削弱 BOSS
+  function auraBonus(m) {
+    const p = m.def.passives?.find(x => x.effect === "bossAura");
+    if (!p) return { atk: 0, def: 0 };
+    const n = S.monsters.filter(x => x !== m && x.hp > 0).length;
+    return { atk: n * (p.atkPer || 1), def: n * (p.defPer || 1) };
+  }
+  // 战斗取数口：基础值 + 「下次战斗」临时加成 + 光环；所有战斗结算统一走这里
+  function effAtk(m) { return m.atk + (m.nextBattleAtk || 0) + auraBonus(m).atk; }
+  function effDef(m) { return m.def_ + (m.nextBattleDef || 0) + auraBonus(m).def; }
+
   // 全局强化取用：BOSS 与普通怪分别累计（旧地图效果「不含 BOSS」需要区分）
   function globalBonusFor(def) {
     const b = S.globalBonus || {};
@@ -221,9 +235,16 @@ window.Engine = (() => {
   }
 
   // 下一步方向预掷：刷出时与每步落地时各掷一次（queuedNext），预告箭头与实际移动共用同一结果
-  // spawnRandom：登场首步在全部邻格中随机；否则在「不掉头」可选格中按主动怪贪心 / 被动怪随机决定
+  // spawnRandom：登场首步在全部邻格中随机；若带 spawnDir（事件配置的登场方向）则固定为该方向
+  // 非登场步：在「不掉头」可选格中按主动怪贪心 / 被动怪随机决定
   function rollNextStep(m, spawnRandom) {
-    const opts = spawnRandom ? S.adj[m.pos] : stepOptions(m.pos, m.lastFrom ?? null);
+    let opts;
+    if (spawnRandom && m.spawnDir) {
+      const hit = dirNeighbor(m.pos, m.spawnDir);
+      opts = hit != null ? [hit] : S.adj[m.pos]; // 该方向没有邻格时退回全邻格随机
+    } else {
+      opts = spawnRandom ? S.adj[m.pos] : stepOptions(m.pos, m.lastFrom ?? null);
+    }
     if (!opts.length) { m.queuedNext = null; return; }
     if (opts.length === 1) { m.queuedNext = opts[0]; return; }
     if (!spawnRandom && m.def.tags.includes("aggressive") && m.pos !== S.player.pos) {
@@ -234,12 +255,25 @@ window.Engine = (() => {
       m.queuedNext = opts[rnd(opts.length)];
     }
   }
-  function spawnMonster(id, pos) {
+  function spawnMonster(id, pos, dir) {
     const m = makeMonster(D.monsters[id], pos);
     m.initRandom = true;
+    if (dir) m.spawnDir = dir; // 事件可指定登场方向（如开局小怪统一朝上）
     rollNextStep(m, true); // 登场首步即预掷：岔路刷新也有确定方向
     S.monsters.push(m);
     return m;
+  }
+
+  // 当前地图的小怪池：只收本图数据真正引用过的小怪（刷怪格 mob 配置 + 全局事件投放）。
+  // 刷怪格兜底与随机事件刷怪都从这里取，避免刷出别的地图的小怪。
+  // 地图完全没有小怪配置时回退全库，保证旧数据仍可运行。
+  function mapMinionPool() {
+    const ids = new Set();
+    const add = (id) => { const d = id && D.monsters[id]; if (d && d.category === "minion") ids.add(id); };
+    (D.map.tiles || []).forEach(t => add(t.mob));
+    (D.map.globalEvents || []).forEach(e => (e.spawns || []).forEach(sp => add(sp.mob)));
+    if (!ids.size) return Object.values(D.monsters).filter(d => d.category === "minion");
+    return [...ids].map(id => D.monsters[id]);
   }
 
   function drawCard(silent) {
@@ -256,6 +290,20 @@ window.Engine = (() => {
   const tilesOf = (sel) => Array.isArray(sel)
     ? sel
     : S.tiles.map((t, i) => (t.t === sel ? i : -1)).filter(i => i >= 0);
+
+  // 事件刷怪落点：tiles 指定的格型/格号是优先池；写了 count 且超过池容量时，余量补到全图空格（避开玩家与已有敌人）
+  function spawnSpotsFor(sp) {
+    const pool = tilesOf(sp.tiles);
+    const n = sp.count ?? pool.length;
+    const spots = pool.slice(0, n);
+    if (n <= spots.length) return spots;
+    const busy = new Set(S.monsters.filter(x => x.hp > 0).map(x => x.pos));
+    busy.add(S.player.pos);
+    spots.forEach(i => busy.add(i));
+    const free = S.tiles.map((t, i) => i).filter(i => !busy.has(i));
+    while (free.length && spots.length < n) spots.push(free.splice(rnd(free.length), 1)[0]);
+    return spots;
+  }
 
   function fireRoundStartEffects(r) {
     // 每轮只结算一次：轮次进度回退（进度 -1）后再次经过同一轮时，事件不得重复触发
@@ -275,7 +323,7 @@ window.Engine = (() => {
       if (e.round !== r) return;
       log(`⚡ 第 ${e.round} 轮事件${e.name ? `【${e.name}】` : ""}：${e.desc}`, "warn");
       e.spawns?.forEach(sp => {
-        tilesOf(sp.tiles).forEach(i => { const m = spawnMonster(sp.mob, i); log(`　【${m.name}】出现在第 ${i} 格。`, "warn"); });
+        spawnSpotsFor(sp).forEach(i => { const m = spawnMonster(sp.mob, i, sp.dir); log(`　【${m.name}】出现在第 ${i} 格。`, "warn"); });
       });
       if (e.effect === "allMonstersStats" || e.effect === "allMonstersPlus1") {
         const noBoss = e.effect === "allMonstersPlus1"; // 旧地图效果：不含 BOSS
@@ -323,6 +371,7 @@ window.Engine = (() => {
   function turnStartEffects() {
     const P = S.player;
     if (S.flames) { S.flames = null; log(`青焰熄灭了。`); } // 青鸾雏焰：持续到下回合开始
+    P.turnMoveBonus = 0; // 本回合临时移速同样只持续到本回合结束
     const hadPixel = P.buffs.some(b => b.pixel);
     if (hadPixel) { P.buffs = P.buffs.filter(b => !b.pixel); log(`【像素化】效果结束。`); }
     const draws = chipSum("draw");
@@ -413,8 +462,18 @@ window.Engine = (() => {
     } else if (p.effect === "azureFlame") {
       // 青鸾雏焰：本回合移动经过的节点（含起点与终点）铺设青焰，持续到下回合开始（turnStartEffects 清除）；本回合移速 +3
       S.player.flameActive = true;
-      S.player.moveBonus += 3;
-      log(`【${p.name}】发动：本回合移动速度 +3，本次移动经过的节点将被青焰环绕（敌人经过受 ${flameDamage()} 点伤害，持续到下回合开始）。`, "good");
+      // 写成 turnMoveBonus 而不是 moveBonus：后者是一次性的，掷骰时就被消耗清零，
+      // 而「本回合移动速度 +N」必须同时覆盖掷骰与疾行续走（见 derived）
+      const spd = p.moveBonus || 0;
+      S.player.turnMoveBonus += spd;
+      log(`【${p.name}】发动：本回合移动速度 +${spd}，本次移动经过的节点将被青焰环绕（敌人经过受 ${flameDamage()} 点伤害，持续到下回合开始）。`, "good");
+    } else if (p.effect === "sweetDeploy") {
+      // 甜品登场：进入地块瞄准模式，选点后结算（chooseDeployTile）
+      const cands = S.tiles.map((t, i) => i).filter(i => graphDist(S.player.pos, i) <= 3);
+      S.targeting = { deploy: true, candidates: cands, cardName: p.name };
+      log(`【${p.name}】进入瞄准：请在棋盘上选择 3 格内的地块放置甜品使魔（${cands.length} 个候选）。`);
+      window.UI.renderAll();
+      return; // 冷却在选点结算时才开始计算
     } else {
       S.player.atkBuffNextBattle = p.value;
       log(`【${p.name}】发动：下一场战斗攻击力+${p.value}。`, "good");
@@ -519,6 +578,12 @@ window.Engine = (() => {
   function onCardPlayed() { const n = chipSum("coinPerCard"); if (n > 0) { S.player.coins += n; log(`【回收】获得 ${n} 金币。`); } }
 
   // ---------- 拓扑工具（图泛化，环道为特例）----------
+  // 指定方向上的邻格：方向用向量表达（如 [0,-1] 向上）；该方向没有邻格时返回 null
+  function dirNeighbor(pos, dv) {
+    if (!dv || S.tiles[pos].x == null) return null;
+    const tx = S.tiles[pos].x + dv[0], ty = S.tiles[pos].y + dv[1];
+    return S.adj[pos].find(nb => S.tiles[nb].x === tx && S.tiles[nb].y === ty) ?? null;
+  }
   // 初始方向：地图可配 initialDir 向量（如 [0,1] 向下）优先匹配；否则顺时针邻格，再次逆时针，最后任一邻格
   function initialNext(pos) {
     const n = S.tiles.length;
@@ -693,6 +758,7 @@ window.Engine = (() => {
       S.player.pos = next;
       mv.asked = null; // 进入新格即清空「本格已询问」记录：绕回同一格会重新询问（每次经过都能再战）
       if (S.player.flameActive) layFlame(next); // 青焰含途经与终点格
+      healPassAllies(next); // 治愈魔法：路过甜品使魔所在格即触发
       window.UI.renderAll(); // 步进可视化
       if (ANIM) await delay(ANIM);
       if (S.over || S.battle) break;
@@ -852,14 +918,20 @@ window.Engine = (() => {
         if (await tryUpgrade()) await openChipChoice();
         break;
       }
-      case "dash": { const extra = d10(); log(`疾行：再掷 ${extra} 点！`); return extra; }
+      case "dash": {
+        // 疾行 = 再掷一次移动骰；与普通回合、双骰一致地计入移速加成（升级 + 筹码）
+        const roll = d10(), spd = derived().speed;
+        if (spd > 0) log(`疾行：再掷 ${roll} 点，移速 +${spd}，共 ${roll + spd} 点！`);
+        else log(`疾行：再掷 ${roll} 点！`);
+        return roll + spd;
+      }
       case "event": randomEvent(); break;
       case "spawn": {
         // 刷怪格：每次落格必刷一只（已有怪也叠刷）；战斗重入时由 mv.spawnDone 挡住不重复刷。
         // 交战一律交给上层的「按怪询问」流程，否则格上原有怪物会被询问一次、又被地块效果强制开战一次
         if (S.move && S.move.spawnDone) break;
         const def = tile.mob ? D.monsters[tile.mob] : null;
-        const id = def ? def.id : (() => { const pool = Object.values(D.monsters).filter(d => d.category === "minion"); return pool[rnd(pool.length)].id; })();
+        const id = def ? def.id : (() => { const pool = mapMinionPool(); return pool[rnd(pool.length)].id; })();
         const nm = spawnMonster(id, pos);
         log(`刷怪地块：一只【${nm.name}】出现了！`, "warn");
         break;
@@ -935,7 +1007,7 @@ window.Engine = (() => {
 
   // 事件刷怪：全图随机挑 n 个互不相同的地块，每格刷 1 只随机小怪（不排除任何地块类型）
   function eventSpawnMinions(n) {
-    const pool = Object.values(D.monsters).filter(d => d.category === "minion");
+    const pool = mapMinionPool();
     const total = D.map.tiles.length;
     const picked = [];
     for (let guard = 0; picked.length < n && guard < 100; guard++) {
@@ -1025,8 +1097,8 @@ window.Engine = (() => {
     if (target && pv > 0 && (target.hunt || 0) > 0) parts.push(`追猎+${pv}`);
     if (hasChip(c => c.sancai) && P.coins > 20) parts.push(`散财+${Math.floor(P.coins * 0.3)}（耗8金币）`);
     return { total: computeAttack(target, null, true), parts, stance: target ? monsterStance(target) : null,
-      enemyAtk: target ? target.atk + (target.nextBattleAtk || 0) : null,
-      enemyDef: target ? target.def_ + (target.nextBattleDef || 0) : null };
+      enemyAtk: target ? effAtk(target) : null,
+      enemyDef: target ? effDef(target) : null };
   }
 
   function onHitEnemy(target) {
@@ -1040,14 +1112,15 @@ window.Engine = (() => {
     });
   }
 
-  // 对怪物造成伤害：标记 +1/层；命中触发词条；返回实际总伤害
+  // 对怪物造成伤害：每层标记使本次伤害 +1；返回实际总伤害
+  // 命中词条（猎印挂标记 / 财力挣金币）不在这里触发——它只属于「战斗攻击」，
+  // 由 resolvePlayerAttack 在结算后显式调用 onHitEnemy；出牌伤害与青焰等效果伤害不触发。
   function dealToMonster(m, base) {
     const marks = m.marks || 0;
     const total = Math.max(1, base) + marks;
     if (marks > 0) log(`【${m.name}】身负 ${marks} 层标记，伤害 +${marks}。`);
     m.hp -= total;
     log(`对【${m.name}】造成 ${total} 点伤害${m.hp <= 0 ? "，将其击倒！" : `（剩 ${Math.max(0, m.hp)}）`}`, "good");
-    if (total > 0) onHitEnemy(m);
     if (m.hp <= 0) defeatMonster(m);
     // 晕彩救援：安若素血线跌破阈值触发；被击倒时（含在阈值前就被一次打死）也保底触发
     const rescue = m.def.passives?.find(p => p.effect === "yuncaiRescue");
@@ -1089,7 +1162,7 @@ window.Engine = (() => {
     }
     const pRoll = d6(), mRoll = d6();
     const stance = monsterStance(t);
-    const enemyDef = t.def_ + (t.nextBattleDef || 0); // 骑士守护：本次防守计入临时防御
+    const enemyDef = effDef(t); // 骑士守护的临时防御与光环加成都计入本次防守
     t.nextBattleAtk = 0; t.nextBattleDef = 0; // 「下次战斗」仅生效一次，反击是另一场战斗
     let dmg;
     if (stance === "dodge") {
@@ -1101,7 +1174,7 @@ window.Engine = (() => {
       log(`对拼：我方 ${atk}+${pRoll} vs 敌方 ${enemyDef}+${mRoll}（防御姿态）`);
     }
     if (dmg > 0 && b.finalMult > 1) { dmg = Math.floor(dmg * b.finalMult); log(`【全力攻击】最终结算 ×${b.finalMult} → ${dmg} 点！`, "battle"); }
-    if (dmg > 0) dealToMonster(t, dmg);
+    if (dmg > 0) { dealToMonster(t, dmg); onHitEnemy(t); } // 命中词条只认战斗攻击：出牌伤害与青焰伤害不触发
     // 反击：目标存活且有 counter 标签 → 立即进入一次完整的「怪物攻击」战斗
     // （与怪物主动攻击同流程：玩家选姿态、打出防御牌、双方掷骰后结算）
     if (t.hp > 0 && !S.over && t.def.tags.includes("counter")) {
@@ -1144,6 +1217,147 @@ window.Engine = (() => {
     if (t.def.category === "boss") gameOver(true);
   }
 
+  // ================= 友方召唤物：甜品使魔（洛可可）=================
+  // 甜品使魔是友方单位：玩家无法攻击、敌人可以攻击；行动顺序为 玩家 → 友方 → 敌方
+  function spawnFamiliar(pos) {
+    const def = D.allies.dessert_familiar;
+    const a = { uid: ++S.allySeq, def, name: `${def.name}${S.allySeq}`, pos,
+      hp: def.hpMax, hpMax: def.hpMax,
+      atk: def.attack + (S.famAtkBonus || 0), def: def.defense,
+      nextMoveBonus: 0 };
+    S.allies.push(a);
+    return a;
+  }
+
+  // 甜品登场选点结算：生成使魔，并给全体使魔（含此后生成的）攻击力永久 +2
+  function chooseDeployTile(pos) {
+    const t = S.targeting;
+    if (!t || !t.deploy || !t.candidates.includes(pos)) return;
+    S.targeting = null;
+    S.famAtkBonus = (S.famAtkBonus || 0) + 2;
+    S.allies.forEach(a => { a.atk += 2; });
+    const a = spawnFamiliar(pos);
+    const p = D.player.activeSkill;
+    S.player.skillCd = p.cooldown;
+    log(`【${p.name}】发动：【${a.name}】在第 ${pos} 格登场！所有甜品使魔攻击力永久 +2（现 ${a.atk}）。`, "good");
+    window.UI.renderAll();
+  }
+
+  // 治愈魔法：玩家路过甜品使魔所在格时触发（途经与落格均算路过）
+  function healPassAllies(pos) {
+    if (D.player.passiveSkill?.effect !== "healingPass") return;
+    const P = S.player;
+    (S.allies || []).forEach(a => {
+      if (a.hp <= 0 || a.pos !== pos) return;
+      const ph = Math.min(2, P.hpMax - P.hp);
+      if (ph > 0) { P.hp += ph; log(`【治愈魔法】：回复 ${ph} 生命（现 ${P.hp}/${P.hpMax}）。`, "good"); }
+      const ah = Math.min(2, a.hpMax - a.hp);
+      if (ah > 0) { a.hp += ah; log(`【治愈魔法】：【${a.name}】回复 ${ah} 生命（现 ${a.hp}/${a.hpMax}）。`, "good"); }
+      a.nextMoveBonus = 3; // 覆盖：同回合反复路过仍为 +3
+      log(`【治愈魔法】：【${a.name}】下次移动速度 +3。`);
+    });
+  }
+
+  // 使魔击倒怪物：视为玩家击倒（金币与任务进度照常），但不触发任何筹码效果（财力II/追猎等）
+  function defeatMonsterByAlly(t) {
+    S.player.coins += t.def.coinDrop;
+    log(`获得 ${t.def.coinDrop} 金币。`, "good");
+    S.quests?.forEach(q => {
+      const hit = q.targets ? q.targets.includes(t.def.id) : q.target === t.def.id;
+      if (!q.done && hit) q.progress++;
+    });
+    S.monsters = S.monsters.filter(m => m !== t);
+    if (t.def.category === "boss") gameOver(true);
+  }
+
+  // 使魔攻击一只怪物：双方各掷 d6；不触发任何筹码效果（不加标记伤害、不走 onHitEnemy）
+  function allyStrike(a, m) {
+    const aRoll = d6(), mRoll = d6();
+    const dmg = Math.max(1, a.atk + aRoll - (m.def_ + mRoll));
+    log(`【${a.name}】攻击【${m.name}】：${a.atk}+${aRoll} vs ${m.def_}+${mRoll}，造成 ${dmg} 点伤害${m.hp - dmg <= 0 ? "，将其击倒！" : `（剩 ${Math.max(0, m.hp - dmg)}）`}`, "good");
+    m.hp -= dmg;
+    if (m.hp <= 0) { defeatMonsterByAlly(m); return; }
+    // 怪物还手：同样自动结算
+    const cRoll = d6(), fRoll = d6();
+    const cdmg = Math.max(1, effAtk(m) + cRoll - (a.def + fRoll));
+    a.hp -= cdmg;
+    log(`【${m.name}】还手：【${a.name}】受到 ${cdmg} 点伤害（剩 ${Math.max(0, a.hp)}）。`, "warn");
+    if (a.hp <= 0) {
+      S.allies = S.allies.filter(x => x !== a);
+      log(`【${a.name}】被击碎了……`, "warn");
+    }
+  }
+
+  // 敌人路过甜品使魔所在格：主动攻击的敌人会攻击它（自动结算，无需玩家选姿态）
+  function monsterStrikeAlly(m, a) {
+    const mRoll = d6(), aRoll = d6();
+    const dmg = Math.max(1, effAtk(m) + mRoll - (a.def + aRoll));
+    a.hp -= dmg;
+    log(`⚔【${m.name}】攻击【${a.name}】：造成 ${dmg} 点伤害（剩 ${Math.max(0, a.hp)}）。`, "battle");
+    if (a.hp <= 0) {
+      S.allies = S.allies.filter(x => x !== a);
+      log(`【${a.name}】被击碎了……`, "warn");
+    }
+  }
+
+  // 友方阶段：玩家回合结束后、敌方行动前，每个使魔依次行动
+  function allyTurns() {
+    if (S.over) { aiTurns(); return; }
+    const list = (S.allies || []).slice();
+    const step = (i) => {
+      if (S.over) return;
+      if (i >= list.length) { aiTurns(); return; }
+      const a = list[i];
+      if (a.hp <= 0 || !S.allies.includes(a)) { step(i + 1); return; }
+      allyMove(a, () => step(i + 1));
+    };
+    step(0);
+  }
+
+  function allyMove(a, done) {
+    const roll = d10();
+    const bonus = a.nextMoveBonus || 0;
+    if (bonus) log(`【${a.name}】移速提升 +${bonus}。`, "good");
+    a.nextMoveBonus = 0;
+    log(`【${a.name}】掷骰 ${roll}${bonus ? "（+" + bonus + " 移速）" : ""} 点，开始追击。`);
+    S.move = { who: a, isAlly: true, steps: roll + bonus, done, prev: null };
+    window.UI.renderAll();
+    stepAlly();
+  }
+
+  // 使魔移动：每步贪心逼近最近的怪物；进入怪物所在格即攻击格上所有怪物
+  async function stepAlly() {
+    const mv = S.move;
+    if (!mv || !mv.isAlly) return;
+    const a = mv.who;
+    while (mv.steps > 0 && !S.over && a.hp > 0) {
+      const opts = S.adj[a.pos];
+      if (!opts.length) break;
+      const target = nearestMonster(a.pos);
+      let next;
+      if (target) {
+        next = opts[0];
+        let bd = graphDist(next, target.pos);
+        for (const o of opts) { const d = graphDist(o, target.pos); if (d < bd) { bd = d; next = o; } }
+      } else {
+        next = opts[rnd(opts.length)]; // 场上没有怪物：随机游走
+      }
+      mv.steps--;
+      a.pos = next;
+      window.UI.renderAll();
+      if (ANIM) await delay(ANIM);
+      if (S.over || a.hp <= 0) break;
+      // 攻击所有自己路过的怪物（含同格多只）
+      const foes = monstersAt(a.pos).filter(x => x.hp > 0);
+      for (const foe of foes) {
+        allyStrike(a, foe);
+        if (a.hp <= 0 || S.over) break;
+      }
+    }
+    const d = mv.done; S.move = null;
+    if (d) d();
+  }
+
   // 怪物攻玩家（骰点在玩家选定姿态后才掷，保证随机感）
   function monsterAttack(m, reason) {
     const counter = reason === "counter";
@@ -1160,7 +1374,7 @@ window.Engine = (() => {
     if (t.def.skill?.effect === "selfDicePlus" && t.skillCd === 0) { mDiceBonus = t.def.skill.value; t.skillCd = t.def.skill.cooldown; log(`【${t.def.skill.name}】发动：怪物骰点+${mDiceBonus}。`, "battle"); }
     const mRaw = d6(), pRoll = d6();
     const mRoll = mRaw + mDiceBonus;
-    const mAtk = t.atk + (t.nextBattleAtk || 0); // 骑士守护：下次战斗攻击+3
+    const mAtk = effAtk(t); // 骑士守护的临时攻击与光环加成都计入本次出手
     b.pending = { mRoll, pRoll };
     log(`掷骰：我方 ${pRoll} vs 敌方 ${mRaw}${mDiceBonus ? "+" + mDiceBonus : ""}（${stance === "dodge" ? "闪避" : "防御"}姿态）`);
     let dmg;
@@ -1215,7 +1429,7 @@ window.Engine = (() => {
     }
     if (P.hp <= 0 && !P.ko) {
       P.hp = 0; P.ko = true;
-      P.atkBuffNextBattle = 0; P.moveBonus = 0; P.nextDouble = false; P.nextFixed = 0; P.nextChooseDir = false;
+      P.atkBuffNextBattle = 0; P.moveBonus = 0; P.turnMoveBonus = 0; P.nextDouble = false; P.nextFixed = 0; P.nextChooseDir = false;
       log("玩家被击倒！所有 buff 清空，跳过后续行动，下回合开始时原地复活。", "warn");
       advanceRoundProgress(1); // 轮次进度 +1（设计文档02 §6）：倒地瞬间即时结算，被跨过的那一轮事件照常触发
     }
@@ -1278,7 +1492,7 @@ window.Engine = (() => {
     log("玩家回合结束。AI 行动中…");
     window.UI.renderAll();
     if (S.aiBusy) return;
-    setTimeout(aiTurns, AI_DELAY);
+    setTimeout(allyTurns, AI_DELAY); // 行动顺序：玩家 → 友方（甜品使魔）→ 敌方
   }
 
   function aiTurns() {
@@ -1291,38 +1505,76 @@ window.Engine = (() => {
       const m = S.monsters.find(x => !acted.has(x.uid));
       if (!m) { S.aiBusy = false; S._dbg.aiEnd++; endRound(); return; }
       acted.add(m.uid);
-      if (m.hp <= 0 || m.def.move?.stationary) { step(); return; } // 驻守怪跳过；可移动 BOSS（晕彩）正常行动
+      // 被击倒的怪、以及本回合刚由吸收进化出的产物：本回合不再行动
+      if (m.hp <= 0 || m.fusedRound === S.round) { step(); return; }
       if (m.skillCd > 0) m.skillCd--;
+      // 驻守怪（卡牌实验室的变彩）：只结算回合开始技能，不移动
+      if (m.def.move?.stationary) {
+        runMonsterSkill(m);
+        window.UI.renderAll();
+        setTimeout(step, AI_DELAY);
+        return;
+      }
       aiMove(m, () => { window.UI.renderAll(); setTimeout(step, AI_DELAY); });
     };
     step();
   }
 
+  // 回合开始主动技能：可移动的怪在 aiMove 里结算，驻守怪由 aiTurns 直接结算（否则会被整只跳过）
+  function runMonsterSkill(m) {
+    const sk = m.def.skill;
+    if (!sk || m.skillCd > 0) return;
+    if (sk.effect === "yuxiaShot") {
+      let dmg = typeof sk.value === "object" ? (sk.value[D.diff] ?? sk.value.normal) : sk.value;
+      if (D.diff === "nightmare" || D.diff === "crazy") {
+        // 噩梦/疯狂：场上每有一名精英或 BOSS（不含自身）伤害 +1
+        const strong = S.monsters.filter(x => x !== m && x.hp > 0 && (x.def.category === "elite" || x.def.category === "boss")).length;
+        if (strong) { dmg += strong; log(`【映霞】强化：场上每名精英/BOSS +1 伤害（共 +${strong}）。`, "warn"); }
+      }
+      log(`【${m.name}】发动【${sk.name}】：远程射击！`, "battle");
+      playerTakesDamage(dmg, `【映霞】的箭矢`);
+      checkPlayerKo();
+      m.skillCd = sk.cooldown;
+    } else if (sk.effect === "lightSplit") {
+      const c = makeMonster(D.monsters.maid_yuncai_clone, m.pos); // 本体同格
+      c.atk = m.atk; c.def_ = m.def_; // 攻防复制生成时本体数值
+      S.monsters.push(c); // 追加到队尾：本体行动后行动
+      log(`【析光】发动：一名晕彩分身现身（攻防复制本体 ${m.atk}/${m.def_}）！`, "warn");
+      m.skillCd = sk.cooldown;
+    } else if (sk.effect === "spawnAround") {
+      // 魔物增生：在自身周围随机空格生成游荡魔物（周围被占满时少生成）
+      let born = 0;
+      for (let i = 0; i < (sk.count || 1); i++) if (spawnNear(sk.mob, m.pos, sk.radius || 2)) born++;
+      log(`【${m.name}】发动【${sk.name}】：${born} 只游荡魔物在周围现身！`, "warn");
+      m.skillCd = sk.cooldown;
+    } else if (sk.effect === "fuseMinions") {
+      // 卡牌融合：按 tiers 数组顺序取第一个素材足够的档位——数组顺序即优先级（见 data.js 的注释）
+      const tiers = sk.tiers || [{ from: [sk.mob], count: sk.count || 2, into: sk.into }];
+      for (const tier of tiers) {
+        const need = tier.count || 2;
+        const prey = S.monsters.filter(x => x.hp > 0 && tier.from.includes(x.def.id));
+        if (prey.length < need) continue; // 本档素材不足：降档再试
+        const picks = [];
+        for (let i = 0; i < need; i++) picks.push(prey.splice(rnd(prey.length), 1)[0]);
+        S.monsters = S.monsters.filter(x => !picks.includes(x));
+        const into = tier.into[rnd(tier.into.length)];
+        const born = spawnNear(into, m.pos, sk.radius || 2) || (() => {
+          // 周围没有空格：产物改落在素材原格
+          const fb = makeMonster(D.monsters[into], picks[0].pos);
+          S.monsters.push(fb);
+          return fb;
+        })();
+        log(`【${m.name}】发动【${sk.name}】：${need} 只素材融合，【${born.name}】现身！`, "warn");
+        m.skillCd = sk.cooldown;
+        return;
+      }
+      // 所有档位都不足：不发动、不进 CD，下回合再试
+    }
+  }
+
   function aiMove(m, done) {
     if (S.player.ko) { done(); return; }
-    // 回合开始主动技能
-    const sk = m.def.skill;
-    if (sk && m.skillCd === 0) {
-      if (sk.effect === "yuxiaShot") {
-        let dmg = typeof sk.value === "object" ? (sk.value[D.diff] ?? sk.value.normal) : sk.value;
-        if (D.diff === "nightmare" || D.diff === "crazy") {
-          // 噩梦/疯狂：场上每有一名精英或 BOSS（不含自身）伤害 +1
-          const strong = S.monsters.filter(x => x !== m && x.hp > 0 && (x.def.category === "elite" || x.def.category === "boss")).length;
-          if (strong) { dmg += strong; log(`【映霞】强化：场上每名精英/BOSS +1 伤害（共 +${strong}）。`, "warn"); }
-        }
-        log(`【${m.name}】发动【${sk.name}】：远程射击！`, "battle");
-        playerTakesDamage(dmg, `【映霞】的箭矢`);
-        checkPlayerKo();
-        m.skillCd = sk.cooldown;
-        if (S.player.ko) { done(); return; }
-      } else if (sk.effect === "lightSplit") {
-        const c = makeMonster(D.monsters.maid_yuncai_clone, m.pos); // 本体同格
-        c.atk = m.atk; c.def_ = m.def_; // 攻防复制生成时本体数值
-        S.monsters.push(c); // 追加到队尾：本体行动后行动
-        log(`【析光】发动：一名晕彩分身现身（攻防复制本体 ${m.atk}/${m.def_}）！`, "warn");
-        m.skillCd = sk.cooldown;
-      }
-    }
+    runMonsterSkill(m);
     if (S.player.ko) { done(); return; }
     const roll = d10();
     const bonus = (m.def.move.steps || 1) - 1 + (m.moveBonusNext || 0);
@@ -1363,9 +1615,71 @@ window.Engine = (() => {
     }
   }
 
+  // ---------- 卡牌实验室：吸收与融合（设计文档 08）----------
+  // 距 pos 不超过 radius 步的空格（排除玩家所在格与已有敌人格）
+  function freeTilesNear(pos, radius) {
+    const busy = new Set(S.monsters.filter(x => x.hp > 0).map(x => x.pos));
+    busy.add(S.player.pos);
+    const out = [], seen = new Set([pos]), q = [{ p: pos, d: 0 }];
+    while (q.length) {
+      const cur = q.shift();
+      if (cur.d >= radius) continue;
+      for (const nb of S.adj[cur.p]) {
+        if (seen.has(nb)) continue;
+        seen.add(nb);
+        q.push({ p: nb, d: cur.d + 1 });
+        if (!busy.has(nb)) out.push(nb);
+      }
+    }
+    return out;
+  }
+  // 在 pos 附近随机空格刷怪；无空格则返回 null
+  function spawnNear(mobId, pos, radius) {
+    const cand = freeTilesNear(pos, radius);
+    if (!cand.length) return null;
+    return spawnMonster(mobId, cand[rnd(cand.length)]);
+  }
+
+  // 游荡魔物互相吸收：移动方与同格的另一只同类合而为一，随机进化成一只一级精英
+  // 产物满血、本回合不再行动；不视为击败（不给金币、不推进任务），只做单位替换
+  function devourMinion(m) {
+    const p = m.def.passives?.find(x => x.effect === "devourMinion");
+    if (!p || m.hp <= 0) return false;
+    const other = monstersAt(m.pos).find(x => x !== m && x.hp > 0 && x.def.id === m.def.id);
+    if (!other) return false;
+    const fused = makeMonster(D.monsters[p.into[rnd(p.into.length)]], m.pos);
+    fused.fusedRound = S.round;  // 本回合不再行动
+    fused.lastFrom = m.lastFrom; // 方向继承：下回合起步不掉头
+    S.monsters = S.monsters.filter(x => x !== m && x !== other);
+    S.monsters.push(fused);
+    rollNextStep(fused, false);
+    log(`【吸收】：两只游荡魔物合而为一，【${fused.name}】现身（${fused.hp}/${fused.hpMax}）！`, "warn");
+    return true;
+  }
+
+  // 奇美拉「万魔之王」：只有奇美拉**自己移动**到小怪所在格时才吸收（单向）
+  // 小怪路过奇美拉不会被吃掉——否则「魔物增生」产出的小怪会白白喂养本体，形成打不断的滚雪球
+  // 成长速率按难度分档：普通/困难每 perCount 只 +1 攻击，噩梦/疯狂每只 +1
+  function absorbMinions(m) {
+    if (m.hp <= 0) return false;
+    const p = m.def.passives?.find(x => x.effect === "devourMinions");
+    if (!p) return false;
+    const prey = monstersAt(m.pos).filter(x => x.hp > 0 && x.def.id === "lab_wander");
+    if (!prey.length) return false;
+    S.monsters = S.monsters.filter(x => !prey.includes(x));
+    const per = typeof p.perCount === "object" ? (p.perCount[D.diff] ?? 1) : (p.perCount || 1);
+    const before = m.devourCount || 0;
+    m.devourCount = before + prey.length;
+    const gain = (Math.floor(m.devourCount / per) - Math.floor(before / per)) * (p.atkPer || 1);
+    m.atk += gain;
+    log(`【万魔之王】：【${m.name}】吸收 ${prey.length} 只游荡魔物（累计 ${m.devourCount}/${per}）` +
+      (gain > 0 ? `，攻击力永久 +${gain}（现 ${m.atk}）。` : `，攻击力未提升。`), "warn");
+    return true;
+  }
+
   async function stepMonster() {
     const mv = S.move;
-    if (!mv || mv.who === "player") return;
+    if (!mv || mv.who === "player" || mv.isAlly) return;
     const m = mv.who, P = S.player;
     while (mv.steps > 0 && !S.over && !S.battle) {
       let next;
@@ -1399,6 +1713,12 @@ window.Engine = (() => {
         if (m.hp <= 0) break; // 被青焰击倒：本次移动结束（defeatMonster 已结算）
         if (S.over) break;
       }
+      // 敌人路过甜品使魔：主动攻击的敌人会攻击它（每名敌人每回合只发动一次攻击，
+      // 先经过使魔再经过玩家时只攻击使魔）
+      if (!mv.attacked && m.def.tags.includes("aggressive")) {
+        const ally = (S.allies || []).find(x => x.hp > 0 && x.pos === m.pos);
+        if (ally) { mv.attacked = true; monsterStrikeAlly(m, ally); }
+      }
       if (m.pos === P.pos && !mv.attacked) {
         mv.attacked = true;
         // 喵之追猎：怪物路过玩家所在格 → 施加 1 层追猎
@@ -1411,10 +1731,20 @@ window.Engine = (() => {
         } else if (m.def.tags.includes("aggressive")) {
           monsterAttack(m);
           return;
+        } else if (m.def.passives?.some(p => p.effect === "passDamage")) {
+          // 卡牌·雷鸟：不主动开战，但掠过玩家即造成自身当前攻击力的伤害
+          const dmg = effAtk(m);
+          log(`【${m.name}】掠过：对你造成 ${dmg} 点伤害！`, "warn");
+          playerTakesDamage(dmg, `【${m.name}】的掠过`);
+          checkPlayerKo();
+          if (S.over) return;
         }
       }
       // 「经过时」效果：只触发移动方的被动（A 过 B 只算 A 的经过；起步同格不触发）
       passByEffects(m);
+      // 卡牌实验室的吸收：奇美拉自己走到小怪格上才吸收（单向，不影响移动方存活）；两只游荡魔物相遇则互相吸收并进化
+      absorbMinions(m);
+      if (devourMinion(m)) break;
     }
     if (S.over || S.battle) return;
     const d = mv.done; S.move = null;
@@ -1458,7 +1788,6 @@ window.Engine = (() => {
   }
   // 怪物下一步意向格：只在方向确定时返回（方向随机的怪不预告，避免误导）
   // 怪物方向预告：直接读预掷结果（queuedNext）——任何位置（含岔路）都有确定方向
-  // 怪物方向预告：直接读预掷结果（queuedNext）——任何位置（含岔路）都有确定方向
   function peekNext(m) {
     if (!m || m.hp <= 0) return null;
     return m.queuedNext ?? null;
@@ -1470,7 +1799,7 @@ window.Engine = (() => {
     const diceBonus = (t.def.skill?.effect === "selfDicePlus" && t.skillCd === 0) ? (t.def.skill.value || 0) : 0;
     return {
       myDef: dv.def + (b?.defBonus || 0), baseDef: dv.def, defBonus: b?.defBonus || 0,
-      enemyAtk: t.atk + atkBonus, enemyBaseAtk: t.atk, enemyAtkBonus: atkBonus,
+      enemyAtk: effAtk(t), enemyBaseAtk: t.atk, enemyAtkBonus: atkBonus,
       enemyDiceBonus: diceBonus, stance: monsterStance(t),
     };
   }
@@ -1481,12 +1810,19 @@ window.Engine = (() => {
     playerBattlePoints, playBattleCard, playerPlayBattleCard: playBattleCard, resolvePlayerAttack, playerChooseStance,
     attackPreview, defensePreview, pickMoveStep, peekPlayerNext, peekPlayerOptions, peekNext, graphDist,
     buyShop, closeShop, pickChip, chipShopPrice, chooseTarget, cancelTargeting, refreshChips,
+    chooseDeployTile,
     derived,
     // 测试挂钩（chip-test 专用，不在页面 UI 中使用）
     _test: {
       addChip, genChipChoices, chipList, schoolsHeld, judgeQuests,
       computeAttack, playerTakesDamage, dealToMonster, onHitEnemy, onCardPlayed,
       turnStartEffects, turnEndEffects, derived,
+      // 卡牌实验室机制（card-lab-mechanics-test 专用）
+      makeMonster, spawnMonster, monstersAt, rollNextStep, runMonsterSkill,
+      devourMinion, absorbMinions, auraBonus, effAtk, effDef, freeTilesNear, spawnNear, stepMonster,
+      fireRoundStartEffects, spawnSpotsFor, tilesOf, defeatMonster,
+      // 洛可可 / 甜品使魔（rococo-test 专用）
+      spawnFamiliar, stepAlly, allyStrike, monsterStrikeAlly, defeatMonsterByAlly, allyTurns, healPassAllies,
     },
     get state() { return S; },
   };

@@ -176,45 +176,89 @@ window.UI = (() => {
         const c = window.GAME_DATA.chips[id];
         return `<span class="chip-tag rarity-${c.rarity}" data-chip="${id}">${c.name}</span>`;
       }).join(" ") : "暂无") + `</div>`;
-    html += `<div class="info-sec"><b>场上怪物（按登场顺序）</b>`;
-    const candIds = S.targeting ? S.targeting.candidates : null; // 瞄准中的候选：列表中同样可点击锁怪
+    // 怪物图鉴：同一品种合并成一条，个体数值与状态改在棋盘和战斗面板上显示。
+    // 例外：瞄准模式下必须按个体列出，否则无法精确锁定同格同名的两只怪。
+    // 友方召唤物（甜品使魔等）：与怪物分列展示
+    const allies = S.allies || [];
+    if (allies.length) {
+      html += `<div class="info-sec"><b>友方单位</b><br>` + allies.map(a =>
+        `🍰 <b>${a.name}</b> HP ${a.hp}/${a.hpMax} 攻 ${a.atk} 防 ${a.def}` +
+        (a.nextMoveBonus ? `｜下次移动速度 +${a.nextMoveBonus}` : "")
+      ).join("<br>") + `</div>`;
+    }
+    html += `<div class="info-sec"><b>怪物图鉴</b><br><span class="info-hint">棋盘上怪物条目：名字 生命 攻/防 + 状态（▮=标记 追=追猎 CD=技能冷却）</span>`;
+    const candIds = (S.targeting && !S.targeting.deploy) ? S.targeting.candidates : null;
     const GD = window.GAME_DATA;
     const RANK = { normal: 0, hard: 1, nightmare: 2, crazy: 3 };
     const curRank = RANK[GD.diff] ?? 0;
-    S.monsters.forEach(m => {
-      const tags = m.def.tags.map(t => TAG_CN[t] || t).join("、") || "—";
-      const no = candIds ? candIds.indexOf(m.uid) + 1 : 0;
-      const pickable = no > 0 && m.hp > 0;
-      // 主动技能：名称 + 说明 + 冷却状态
-      const sk = m.def.skill;
-      const skLine = sk ? `<br><span class="mob-active">主动【${sk.name}】</span>${sk.desc || ""}` +
-        (sk.cooldown ? `（CD ${sk.cooldown} 轮）｜${m.skillCd > 0 ? `<span class="warn">冷却中：${m.skillCd}</span>` : "<span class='good'>就绪</span>"}` : "") : "";
-      // 被动技能：逐条列出；难度限定且当前难度不满足的被动直接不显示
-      const ps = (m.def.passives || []).filter(p => !p.minDiff || curRank >= RANK[p.minDiff]);
+    const catCN = (c) => c === "boss" ? "BOSS" : c === "elite" ? "精英" : "小怪";
+    const mobArt = (d) => d.art?.full ? `<img class="mob-avatar" src="${d.art.full}" alt="" onerror="this.style.display='none'">` : "";
+    // 技能、被动与行为是品种级信息，与场上个体无关
+    const speciesLines = (d) => {
+      const sk = d.skill;
+      const skLine = sk ? `<br><span class="mob-active">主动【${sk.name || sk.effect || "未知"}】</span>${sk.desc || ""}` +
+        (sk.cooldown ? `（CD ${sk.cooldown} 轮）` : "") : "";
+      const ps = (d.passives || []).filter(p => !p.minDiff || curRank >= RANK[p.minDiff]);
       const psLine = ps.map(p =>
-        `<br><span class="mob-passive">被动【${p.name}】</span>${p.desc || ""}`).join("");
-      html += `<div class="info-mob${pickable ? " pickable" : ""}"${pickable ? ` data-uid="${m.uid}"` : ""}${candIds && !pickable ? ' style="opacity:.4"' : ""}>` +
-        (pickable ? `<span class="pick-idx">${no}</span>` : "") +
-        (m.def.art?.full ? `<img class="mob-avatar" src="${m.def.art.full}" alt="" onerror="this.style.display='none'">` : "") +
-        `<b>${m.name}</b>（${m.def.category === "boss" ? "BOSS" : m.def.category === "elite" ? "精英" : "小怪"}）HP ${m.hp}/${m.hpMax} 攻${m.atk} 防${m.def_}｜悬赏 ◉${m.def.coinDrop}` +
-        skLine + psLine + `<br>` +
-      `行为：${tags}｜守方倾向：${m.def.defend ? (m.def.defend.rule === "always" ? STANCE_CN[m.def.defend.stance] : "按状态切换") : "—"}｜反击：${m.def.tags.includes("counter") ? "会反击" : "不会反击"}<br>` +
-        `标记：${m.marks > 0 ? `${"▮".repeat(Math.min(m.marks, 5))}${m.marks} 层` : "无"}` +
-        (m.hunt > 0 ? `｜<span class="hunt">追猎 ${m.hunt} 层</span>` : "") + `<br>` +
-        (m.def.growth ? `成长：每 ${m.def.growth.everyRounds} 轮攻+${m.def.growth.atk} 防+${m.def.growth.def}｜每 ${m.def.growth.everyRoundsHp} 轮血上限+${m.def.growth.hpGain} 并回复 ${m.def.growth.heal}<br>` : "") +
-        `移动去向：${(() => {
-          const nx = Engine.peekNext(m);
-          if (nx == null) return m.def.tags.includes("aggressive") ? "下一步 → 朝你逼近（尽头处转向）" : "下一步 → 方向未定（随机/岔路）";
-          return `下一步 → ${tileNameAt(S, nx)}`;
-        })()}` +
-        `</div>`;
-    });
+        `<br><span class="mob-passive">被动【${p.name || p.effect || "未知"}】</span>${p.desc || ""}`).join("");
+      const tags = d.tags.map(t => TAG_CN[t] || t).join("、") || "—";
+      const mv = d.move || {};
+      const moveTxt = mv.stationary ? "驻守不动" : `每回合 ${mv.steps ?? 1} 格${d.tags.includes("aggressive") ? "，朝你逼近" : "，不主动靠近"}`;
+      // 守方倾向：不配置就是默认防御，写了等于没写；只有会进入闪避姿态的怪才标出来
+      const dv = d.defend;
+      const dvStances = !dv ? [] : dv.rule === "always" ? [dv.stance]
+        : dv.rule === "hpThreshold" ? [dv.above, dv.belowOrEqual] : [];
+      const dvTxt = dvStances.includes("dodge")
+        ? `｜守方倾向：${dv.rule === "always" ? STANCE_CN[dv.stance]
+          : `按血量切换（高于 ${Math.round(dv.threshold * 100)}% 时 ${STANCE_CN[dv.above]}，否则 ${STANCE_CN[dv.belowOrEqual]}）`}`
+        : "";
+      return skLine + psLine + `<br>行为：${tags}｜移速：${moveTxt}${dvTxt}｜反击：${d.tags.includes("counter") ? "会反击" : "不会反击"}`;
+    };
+    if (candIds) {
+      // —— 瞄准模式：逐个体列出，编号与棋盘标记一致 ——
+      S.monsters.forEach(m => {
+        const no = candIds.indexOf(m.uid) + 1;
+        const pickable = no > 0 && m.hp > 0;
+        html += `<div class="info-mob${pickable ? " pickable" : ""}"${pickable ? ` data-uid="${m.uid}"` : ""}${candIds && !pickable ? ' style="opacity:.4"' : ""}>` +
+          (pickable ? `<span class="pick-idx">${no}</span>` : "") + mobArt(m.def) +
+          `<b>${m.name}</b>（${catCN(m.def.category)}）HP ${m.hp}/${m.hpMax} 攻${m.atk} 防${m.def_}` +
+          speciesLines(m.def) + `</div>`;
+      });
+    } else {
+      // —— 图鉴模式：同品种归并为一条 ——
+      const order = [], byId = new Map();
+      S.monsters.forEach(m => {
+        if (!byId.has(m.def.id)) { byId.set(m.def.id, []); order.push(m.def.id); }
+        byId.get(m.def.id).push(m);
+      });
+      if (!order.length) html += `<br>暂无`;
+      const rng = (arr) => arr.length === 1 ? String(arr[0]) : `${arr[0]}~${arr[arr.length - 1]}`;
+      order.forEach(id => {
+        const list = byId.get(id), d = list[0].def;
+        const alive = list.filter(m => m.hp > 0).length;
+        const atks = [...new Set(list.map(m => m.atk))].sort((a, b) => a - b);
+        const defs = [...new Set(list.map(m => m.def_))].sort((a, b) => a - b);
+        html += `<div class="info-mob">` + mobArt(d) +
+          `<b>${d.name}</b>（${catCN(d.category)}）HP 上限 ${list[0].hpMax}｜攻 ${rng(atks)}｜防 ${rng(defs)}｜悬赏 ◉${d.coinDrop}｜` +
+          `<span class="${alive ? "good" : "warn"}">场上 ${list.length} 只${alive !== list.length ? `（存活 ${alive}）` : ""}</span>` +
+          speciesLines(d) + `</div>`;
+      });
+    }
     html += `</div>`;
     el.innerHTML = html;
     // 瞄准中的候选怪物：点击列表条目即锁定该怪物（与棋盘编号一致）
     el.querySelectorAll(".info-mob.pickable").forEach(node => {
       node.onclick = () => window.Engine.chooseTarget(+node.dataset.uid);
     });
+  }
+
+  // 棋盘怪物条目的状态后缀：标记 / 追猎 / 技能冷却（图例见右上信息面板）
+  function mobStateTag(m) {
+    const s = [];
+    if (m.marks > 0) s.push(`▮${m.marks}`);
+    if (m.hunt > 0) s.push(`追${m.hunt}`);
+    if (m.skillCd > 0 && m.def.skill) s.push(`CD${m.skillCd}`);
+    return s.length ? " " + s.join("") : "";
   }
 
   function renderBoard(S) {
@@ -262,15 +306,31 @@ window.UI = (() => {
       shown.forEach(m => {
         const cls = m.def.category === "boss" ? "token-boss" : "token-m";
         const label = m.def.category === "boss" ? `💀${m.name} ${m.hp}/${m.hpMax}` : `${m.name} ${m.hp}/${m.hpMax}`;
-        svg += `<text x="${p.x}" y="${ty}" class="${cls}" text-anchor="middle">${label}</text>`;
+        // 攻防与品种绑定（同种一致），不在棋盘上重复显示；棋盘只标个体差异：当前生命与状态。
+        // 奇美拉「万魔之王」造成的个体攻击差异，在图鉴（攻/防显示为范围）、战斗面板与日志里都能看到。
+        const tag = mobStateTag(m);
+        svg += `<text x="${p.x}" y="${ty}" class="${cls}" text-anchor="middle">${label}` +
+          (tag ? `<tspan class="token-stat">${tag}</tspan>` : "") + `</text>`;
         ty += 13;
       });
       if (mobs.length > shown.length) {
         svg += `<text x="${p.x}" y="${ty}" class="token-more" text-anchor="middle">…还有 ${mobs.length - shown.length} 只</text>`;
+        ty += 13;
       }
+      // 友方召唤物（甜品使魔）：绿色标识，玩家无法攻击
+      (S.allies || []).filter(a => a.pos === i && a.hp > 0).forEach(a => {
+        svg += `<text x="${p.x}" y="${ty}" class="token-ally" text-anchor="middle">🍰${a.name} ${a.hp}/${a.hpMax}</text>`;
+        ty += 13;
+      });
       if (awaitSet && awaitSet.includes(i)) { // 岔路待选项：可点击高亮
         svg += `<g class="move-choice" data-pos="${i}" style="cursor:pointer">` +
           `<circle cx="${p.x}" cy="${p.y}" r="40" class="move-ring"/>` +
+          `<circle cx="${p.x}" cy="${p.y}" r="44" fill="transparent"/></g>`;
+      }
+      // 甜品登场：3 格内的候选地块高亮，点击放置使魔
+      if (S.targeting && S.targeting.deploy && S.targeting.candidates.includes(i)) {
+        svg += `<g class="deploy-choice" data-pos="${i}" style="cursor:pointer">` +
+          `<circle cx="${p.x}" cy="${p.y}" r="40" class="deploy-ring"/>` +
           `<circle cx="${p.x}" cy="${p.y}" r="44" fill="transparent"/></g>`;
       }
       svg += `</g>`;
@@ -329,6 +389,9 @@ window.UI = (() => {
     board.querySelectorAll(".move-choice").forEach(el => {
       el.onclick = () => Engine.pickMoveStep(+el.dataset.pos);
     });
+    board.querySelectorAll(".deploy-choice").forEach(el => {
+      el.onclick = () => Engine.chooseDeployTile(+el.dataset.pos);
+    });
     if (S.targeting) board.querySelectorAll(".target-hit").forEach(el => {
       el.onclick = () => Engine.chooseTarget(+el.dataset.uid);
     });
@@ -380,6 +443,20 @@ window.UI = (() => {
   }
 
   // ---------- 战斗面板 ----------
+  // 战斗面板的「状态」行：双方当前生效的 buff、标记、追猎与技能冷却
+  function battleStateLine(S, t) {
+    const P = S.player;
+    const mine = P.buffs.length
+      ? P.buffs.map(b => `【${b.name}】${[b.atk ? `攻+${b.atk}` : "", b.dmgTaken ? "受伤+1" : "", b.heal ? "回合回血" : ""].filter(Boolean).join("/")}`).join(" ")
+      : "无";
+    const foe = [];
+    if (t.marks > 0) foe.push(`标记 ${t.marks} 层`);
+    if (t.hunt > 0) foe.push(`追猎 ${t.hunt} 层`);
+    if (t.nextBattleAtk) foe.push(`本次攻击 +${t.nextBattleAtk}`);
+    if (t.skillCd > 0 && t.def.skill) foe.push(`${t.def.skill.name} 冷却 ${t.skillCd} 轮`);
+    return `<b>状态</b>我方：${mine}｜敌方：${foe.length ? foe.join("、") : "无"}<br>`;
+  }
+
   function enterBattle() {
     const S = Engine.state, b = S.battle;
     if (!b) return; // 可见性由 renderAll 统一处理
@@ -402,6 +479,7 @@ window.UI = (() => {
       $("battle-info").innerHTML =
         `<b>我方</b>攻击 <b>${apv.total}</b>${b.cardBonus ? "+" + b.cardBonus : ""}${apv.parts.length ? `（${apv.parts.join("，")}）` : ""}｜战斗点数 <b>${Engine.playerBattlePoints() - b.spentPoints}</b>（已用 ${b.spentPoints}）<br>` +
         `<b>敌方</b>【${t.name}】HP <b>${t.hp}/${t.hpMax}</b>｜攻 <b>${enemyAtk}</b>｜防 <b>${enemyDef}</b>｜姿态 <b>${STANCE_CN_UI[apv.stance] || "防御"}</b>${t.marks ? `｜标记 ${t.marks} 层（我方伤害 +${t.marks}）` : ""}<br>` +
+        battleStateLine(S, t) +
         `结算：我方 ${apv.total}${b.cardBonus ? "+" + b.cardBonus : ""} + 我方骰 vs 敌方 ${enemyDef} + 敌方骰，伤害保底 1${apv.stance === "dodge" ? "；敌方闪避姿态时改比骰点（我方骰 ≥ 敌方骰则它不受伤）" : ""}`;
       const pts = Engine.playerBattlePoints() - b.spentPoints;
       S.player.hand.filter(c => c.type === "battle" && c.kind === "atk").forEach(c => {
@@ -425,6 +503,7 @@ window.UI = (() => {
         (dpv && dpv.enemyAtkBonus ? `（基础 ${dpv.enemyBaseAtk} + 加成 ${dpv.enemyAtkBonus}）` : "") +
         (dpv && dpv.enemyDiceBonus ? `｜骰点 +${dpv.enemyDiceBonus}` : "") +
         `｜姿态 ${stanceTxt}<br>` +
+        battleStateLine(S, t) +
         `结算方式：<b>防御</b>＝敌方攻+敌骰 −（我方防+我骰），伤害保底 1；<b>闪避</b>＝只比骰点，我方骰 ≥ 敌方骰即不受伤（失败则防御按 0 算）<br>` +
         `先打防御牌可提升我方防御，姿态确定后才掷骰。`;
       const pts = Engine.playerBattlePoints() - b.spentPoints;
