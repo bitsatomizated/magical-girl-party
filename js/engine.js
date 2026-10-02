@@ -1310,12 +1310,17 @@ window.Engine = (() => {
   }
 
   // 使魔攻击一只怪物：双方各掷 d6；不触发任何筹码效果（不加标记伤害、不走 onHitEnemy）
+  // 防御读 effDef（计入变彩光环与骑士守护等临时防御）；晕彩救援的触发面与 dealToMonster 一致（低血或击倒）
   function allyStrike(a, m) {
     const aRoll = d6(), mRoll = d6();
-    const dmg = Math.max(1, a.atk + aRoll - (m.def_ + mRoll));
-    log(`【${a.name}】攻击【${m.name}】：${a.atk}+${aRoll} vs ${m.def_}+${mRoll}，造成 ${dmg} 点伤害${m.hp - dmg <= 0 ? "，将其击倒！" : `（剩 ${Math.max(0, m.hp - dmg)}）`}`, "good");
+    const dmg = Math.max(1, a.atk + aRoll - (effDef(m) + mRoll));
+    log(`【${a.name}】攻击【${m.name}】：${a.atk}+${aRoll} vs ${effDef(m)}+${mRoll}，造成 ${dmg} 点伤害${m.hp - dmg <= 0 ? "，将其击倒！" : `（剩 ${Math.max(0, m.hp - dmg)}）`}`, "good");
     m.hp -= dmg;
-    if (m.hp <= 0) { defeatMonsterByAlly(m); return; }
+    if (m.hp <= 0) defeatMonsterByAlly(m);
+    // 晕彩救援：使魔伤害同样要给安若素留保底（否则她被使魔击杀后首领永远不会登场）
+    const rescue = m.def.passives?.find(p => p.effect === "yuncaiRescue");
+    if (rescue && (m.hp <= 0 || m.hp < Math.floor(m.hpMax * rescue.threshold))) tryYuncaiRescue();
+    if (m.hp <= 0) return;
     // 怪物还手：同样自动结算
     const cRoll = d6(), fRoll = d6();
     const cdmg = Math.max(1, effAtk(m) + cRoll - (a.def + fRoll));
