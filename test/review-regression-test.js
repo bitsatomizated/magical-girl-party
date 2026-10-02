@@ -87,6 +87,57 @@ async function flush() { for (let i = 0; i < 30; i++) await Promise.resolve(); }
     assert.equal(m.nextBattleAtk, 0); assert.equal(m.nextBattleDef, 0);
     assert.ok(S.monsters.includes(m));
   }
+  // 使魔享受目标已有标记，但不继承玩家攻击加成，也不触发命中筹码。
+  for (const [marks, defense, expected] of [[0, 0, 5], [3, 0, 8], [3, 20, 4]]) {
+    const { E, S, P, D } = setup();
+    const X = E._test, calls = [];
+    E.registerEffect("allyMarkPlayerProbe", {
+      playerHit() { calls.push("hit"); }, playerKill() { calls.push("kill"); },
+    });
+    D.player = { ...D.player, passiveSkill: { effect: "allyMarkPlayerProbe" } };
+    P.chips = ["hunter1", "hunter2", "hunter3", "wp1", "wp2", "sharp3"];
+    const m = X.spawnMonster("dummy", 0), a = X.spawnFamiliar(0);
+    a.atk = 5; m.hp = m.hpMax = 100; m.def_ = defense; m.marks = marks;
+    const coins = P.coins;
+    X.allyStrike(a, m);
+    assert.equal(m.hp, 100 - expected, "基础伤害保底后只追加一次目标标记层数");
+    assert.equal(m.marks, marks, "使魔不新增或消耗标记");
+    assert.equal(P.coins, coins, "使魔命中不触发财力金币");
+    assert.equal(P.wealth, 0); assert.deepEqual(calls, []);
+    assert.ok(S.monsters.includes(m));
+  }
+  // 标记追加伤害致死时按使魔击杀结算，计入金币和任务，不触发玩家击杀效果或反击。
+  {
+    const { E, S, P, D } = setup();
+    const X = E._test, calls = [];
+    E.registerEffect("allyMarkKillProbe", { playerKill() { calls.push("kill"); } });
+    D.player = { ...D.player, passiveSkill: { effect: "allyMarkKillProbe" } };
+    P.chips = ["hunter3", "wp1", "wp2"];
+    const m = X.spawnMonster("maid_tina", 0), a = X.spawnFamiliar(0);
+    a.atk = 5; m.hp = 6; m.def_ = 0; m.marks = 3;
+    const quest = { target: m.def.id, progress: 0, need: 1, done: false };
+    S.quests.push(quest);
+    const coins = P.coins, hp = a.hp;
+    X.allyStrike(a, m);
+    assert.equal(m.hp, -2); assert.equal(m.marks, 3);
+    assert.equal(S.monsters.includes(m), false); assert.equal(quest.progress, 1);
+    assert.equal(P.coins, coins + m.def.coinDrop); assert.equal(P.wealth, 0);
+    assert.equal(a.hp, hp, "目标已被标记追加伤害击倒，不能反击");
+    assert.deepEqual(calls, []);
+  }
+  // 标记致死仍保留怪物受伤技能（晕彩救援）和正确的伤害来源。
+  {
+    const { E, S } = setup();
+    const X = E._test, sources = [];
+    E.registerEffect("allyMarkDamageProbe", { monsterDamaged(p, c) { sources.push(c.source); } });
+    const m = X.spawnMonster("maid_anruosu", 0), a = X.spawnFamiliar(0);
+    m.def = { ...m.def, passives: [...m.def.passives, { effect: "allyMarkDamageProbe" }] };
+    a.atk = 0; m.hp = 3; m.marks = 3;
+    X.allyStrike(a, m);
+    assert.equal(m.hp, -1); assert.equal(S.yuncaiRescued, true);
+    assert.equal(S.monsters.filter(x => x.def.id === "maid_yuncai").length, 1);
+    assert.deepEqual(sources, ["ally"]);
+  }
   // 公共击杀结算不把使魔击杀误算成玩家筹码触发。
   for (const source of ["player", "ally"]) {
     const { E, S, P } = setup();

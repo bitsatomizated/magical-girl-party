@@ -938,13 +938,19 @@ window.Engine = (() => {
     });
   }
 
+  // 标记是目标的受伤加成，玩家与使魔共用；不触发攻击者的命中/击杀词条。
+  function markedDamage(m, base) {
+    const marks = m.marks || 0;
+    const total = Math.max(1, base) + marks;
+    if (marks > 0) log(`【${m.name}】身负 ${marks} 层标记，伤害 +${marks}。`);
+    return total;
+  }
+
   // 对怪物造成伤害：每层标记使本次伤害 +1；返回实际总伤害
   // 命中词条（猎印挂标记 / 财力挣金币）不在这里触发——它只属于「战斗攻击」，
   // 由 resolvePlayerAttack 在结算后显式调用 onHitEnemy；出牌伤害与青焰等效果伤害不触发。
   function dealToMonster(m, base) {
-    const marks = m.marks || 0;
-    const total = Math.max(1, base) + marks;
-    if (marks > 0) log(`【${m.name}】身负 ${marks} 层标记，伤害 +${marks}。`);
+    const total = markedDamage(m, base);
     m.hp -= total;
     log(`对【${m.name}】造成 ${total} 点伤害${m.hp <= 0 ? "，将其击倒！" : `（剩 ${Math.max(0, m.hp)}）`}`, "good");
     if (m.hp <= 0) defeatMonster(m);
@@ -1123,11 +1129,11 @@ window.Engine = (() => {
     m.nextBattleDef = 0;
   }
 
-  // 使魔攻击一只怪物：双方各掷 d6；不触发任何筹码效果（不加标记伤害、不走 onHitEnemy）
+  // 使魔攻击一只怪物：双方各掷 d6，计入目标已有标记；不触发玩家筹码（不走 onHitEnemy）。
   // 防御读 effDef（计入变彩光环与骑士守护等临时防御）；晕彩救援的触发面与 dealToMonster 一致（低血或击倒）
   function allyStrike(a, m) {
     const aRoll = d6(), mRoll = d6();
-    const dmg = Math.max(1, a.atk + aRoll - (effDef(m) + mRoll));
+    const dmg = markedDamage(m, a.atk + aRoll - (effDef(m) + mRoll));
     log(`【${a.name}】攻击【${m.name}】：${a.atk}+${aRoll} vs ${effDef(m)}+${mRoll}，造成 ${dmg} 点伤害${m.hp - dmg <= 0 ? "，将其击倒！" : `（剩 ${Math.max(0, m.hp - dmg)}）`}`, "good");
     consumeMonsterBattleBonus(m); // 防守已用掉本场加成，反击不能再次使用
     m.hp -= dmg;

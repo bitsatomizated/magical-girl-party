@@ -63,7 +63,7 @@ function renderDocument() {
     "3. 玩家攻击：`playerAttackValue` → `monsterDefend` → 掷骰和伤害 → 若击杀则 `playerKill` 与公共奖励 → `monsterDamaged` → `playerHit` 与命中筹码 → 存活怪反击。击杀先于命中是现有规则。", "",
     "4. 怪物攻击玩家：`monsterAttack` → 掷骰/姿态 → 扣血及受伤筹码 → `playerDamaged` → `monsterDealtDamage` → `playerLethal` → 未获救则正式击倒。成功闪避或减伤至 0 不触发 `playerDamaged`，吸血处理器也不回血。", "",
     "5. 玩家行动结束 → `playerTurnEnd` → 持续效果递减 → 友方召唤物 → 怪物逐个行动。怪物先减冷却，再派发 `monsterTurnStart`；主动技冷却未好时不派发该主动技，被动仍可处理此时机。", "",
-    "6. 经过怪物的效果只由移动方触发；`monsterPassMonster` → `monsterAbsorb` → `monsterFuse`。使魔伤害会触发 `monsterDamaged`，但不会触发玩家命中/击杀技能和筹码。", "",
+    "6. 经过怪物的效果只由移动方触发；`monsterPassMonster` → `monsterAbsorb` → `monsterFuse`。使魔伤害会触发 `monsterDamaged`，但不会触发玩家命中/击杀技能和筹码。目标已有的标记属于受伤加成：使魔攻击在基础伤害保底 1 点后，每层标记追加 1 点；不会新增或消耗标记，也不会获得猎印 III 的玩家攻击力加成。", "",
     "同次派发按定义顺序同步执行：怪物主动在前、被动数组顺序在后。处理器不得返回 Promise；需要玩家选择时写入 targeting/询问状态，由引擎恢复流程。注册发生一次，处理器通过 `getState()` 或 `Engine.state` 获取当前对局，不能缓存旧局的状态对象。", "",
     "`preview: true` 是纯查询契约：只能修改传入的数值汇总上下文，不能扣资源、推进冷却、写日志或修改单位。现有处理器已按此约定实现并有回归检查；自定义处理器同样需要遵守，分发器不是状态写入沙箱。", "",
     "`disabled: true` 可跳过某个技能，供测试和隔离实验使用。未知 effect、重复注册、未知时机和异步处理器会明确报错。", "",

@@ -125,7 +125,7 @@ GAME_DATA.characters = {
 GAME_DATA.allies = {
   dessert_familiar: { id: "dessert_familiar", name: "甜品使魔", hpMax: 20, attack: 3, defense: 3,
     move: { dice: 1, faces: 10 },
-    desc: "主动追击最近的怪物，攻击所有自己路过的怪物；其攻击不触发任何筹码效果，击倒的怪物视为玩家击倒" },
+    desc: "主动追击最近的怪物，攻击所有自己路过的怪物；享受目标已有的标记增伤，但不触发玩家筹码效果；击倒奖励与任务进度计入玩家" },
 };
 
 GAME_DATA.monsters = {
