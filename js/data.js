@@ -258,7 +258,7 @@ GAME_DATA.monsters = {
                crazy:     { hpMax: 14, attack: 5 },
              } },
   // 奇美拉：二级精英；每 2 回合在周围增生 2 只游荡魔物，并吸收同格游荡魔物永久 +1 攻击
-  lab_chimera: { id: "lab_chimera", name: "奇美拉", category: "elite", hpMax: 38, attack: 2, defense: 4,
+  lab_chimera: { id: "lab_chimera", name: "奇美拉", category: "elite", hpMax: 28, attack: 2, defense: 4,
              art: { full: "assets/chars/elite_lab_chimera_full.png" },
              move: { steps: 1 }, coinDrop: 16, tags: ["aggressive", "counter"], numbered: true,
              skill: { name: "魔物增生", cooldown: 2, effect: "spawnAround", mob: "lab_wander", count: 2, radius: 2,
