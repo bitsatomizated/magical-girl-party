@@ -278,10 +278,17 @@ window.Engine = (() => {
 
   function drawCard(silent) {
     if (S.player.hand.length >= 8) { if (!silent) log("手牌已满（8），无法抽取。"); return false; }
-    const pool = D.battlePool.concat(D.effectPool);
+    const pool = battlePoolNow().concat(D.effectPool);
     S.player.hand.push({ ...D.cards[pool[rnd(pool.length)]] });
     if (!silent) log("抽了 1 张牌。");
     return true;
+  }
+
+  // 战斗牌池：星级 ≥2 后蓄力入池（占 2 份，约 1/8 战斗牌概率）；起始卡组仍不含蓄力
+  function battlePoolNow() {
+    const pool = D.battlePool.slice();
+    if (S.player.star >= 2) pool.push("charge", "charge");
+    return pool;
   }
 
   // ================= 轮次（设计文档01 §1）=================
@@ -828,7 +835,7 @@ window.Engine = (() => {
         eff += 1; bat += 1;
       }
       for (let i = 0; i < eff; i++) offers.push({ card: { ...pick(D.effectPool) }, cost: D.map.shopCost, sold: false });
-      for (let i = 0; i < bat; i++) offers.push({ card: { ...pick(D.battlePool) }, cost: D.map.shopCost, sold: false });
+      for (let i = 0; i < bat; i++) offers.push({ card: { ...pick(battlePoolNow()) }, cost: D.map.shopCost, sold: false });
       S.shop = { offers, resolve };
       window.UI.renderAll();
     });
@@ -1203,7 +1210,7 @@ window.Engine = (() => {
       if (S.player.hand.length >= 8) {
         log("【喵之追猎】击倒带【追猎】的敌人，但手牌已满（8），无法抽取。", "warn");
       } else {
-        const card = D.cards[D.battlePool[rnd(D.battlePool.length)]];
+        const card = D.cards[battlePoolNow()[rnd(battlePoolNow().length)]];
         S.player.hand.push({ ...card });
         log(`【喵之追猎】击倒带【追猎】的敌人：抽取 1 张战斗牌【${card.name}】。`, "good");
       }
@@ -1874,6 +1881,7 @@ window.Engine = (() => {
       fireRoundStartEffects, spawnSpotsFor, tilesOf, defeatMonster,
       // 洛可可 / 甜品使魔（rococo-test 专用）
       spawnFamiliar, stepAlly, allyStrike, monsterStrikeAlly, defeatMonsterByAlly, allyTurns, healPassAllies,
+      battlePoolNow,
     },
     get state() { return S; },
   };

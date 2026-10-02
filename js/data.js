@@ -31,7 +31,7 @@ GAME_DATA.cards = {
   cake:     { id: "cake",     name: "蛋糕",     type: "effect", kind: "heal", heal: 2, desc: "回复 2 点生命" },
   burger:   { id: "burger",   name: "汉堡",     type: "effect", kind: "heal", heal: 4, desc: "回复 4 点生命" },
 };
-// 起始卡组/商店/拿牌格可用战斗牌池：蓄力不进普通池，全力攻击为蓄力限定
+// 起始卡组/商店/拿牌格可用战斗牌池：蓄力不进普通池——星级 ≥2 后由引擎动态入池（见 engine.battlePoolNow），全力攻击为蓄力限定
 GAME_DATA.battlePool = ["atk_s", "atk_s", "atk_m", "atk_m", "atk_l", "atk_l", "def_s", "def_s", "def_m", "def_m", "def_l", "shadow", "shadow", "katana"];
 GAME_DATA.effectPool = ["brick", "cannon", "laser", "demo", "hurry", "hurry", "dirChoose", "diceCtrl", "king", "berserk", "poison", "cake", "cake", "burger"];
 
