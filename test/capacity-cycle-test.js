@@ -23,8 +23,8 @@ function start(char="char_xingmeng") {
     assert.equal(X.drawCard(true),true);assert.equal(X.drawCard(true),true);assert.equal(X.drawCard(true),false);
     X.finishPlayerTurn();assert.equal(P.hand.length,10,"回合结束不再截断至 8 张");
     X.startRound();assert.equal(P.hand.length,10);
-    P.hand=hand(6);X.startRound();assert.equal(P.hand.length,6,"扩容不抬高魔导充能的 ≤5 门槛");
-    P.hand=hand(5);X.startRound();assert.equal(P.hand.length,6);assert.equal(P.hand[5].id,"arcaneLaser");
+    P.hand=hand(7);X.startRound();assert.equal(P.hand.length,7,"扩容不抬高魔导充能的 ≤6 门槛");
+    P.hand=hand(6);X.startRound();assert.equal(P.hand.length,7);assert.equal(P.hand[6].id,"arcaneLaser");
     P.hand=hand(9);P.chips.push("lore1");X.startRound();assert.equal(P.hand.length,10,"回合抽牌使用扩容上限");
     P.chips=["capacity"];P.hand=hand(9);P.coins=10;
     S.shop={offers:[{card:D.cards.laser,cost:3},{card:D.cards.cake,cost:3}]};w.UI.renderAll();
@@ -33,7 +33,7 @@ function start(char="char_xingmeng") {
     S.shop=null;P.hand=[...hand(4,"charge"),...hand(6)];P.skillCd=0;S.phase="play";
     E.useSkill();assert.equal(P.hand.length,10);assert.equal(P.hand.filter(c=>c.id==="arcaneLaser").length,4,"生成牌遵守扩容后的上限");
     assert.match(w.document.getElementById("info").textContent,/手牌 10\/10/);
-    assert.match(w.document.getElementById("log").textContent,/手牌上限 10 张，1 张【魔导激光】未能获得/);
+    assert.match(w.document.getElementById("log").textContent,/手牌上限 10 张，2 张【魔导激光】未能获得/);
     P.hp=0;X.checkPlayerKo();assert.equal(E.maxHandSize(),10);X.startRound();assert.equal(E.maxHandSize(),10);
     E.newGame();assert.equal(E.maxHandSize(),8,"新局恢复基础上限");
   }

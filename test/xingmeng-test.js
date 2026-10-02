@@ -52,7 +52,7 @@ async function fire(m) {
     assert.deepEqual([P.hpMax, P.atk, P.def, P.speedBonus], [20, 3, 4, 5]);
     assert.ok(!D.effectPool.includes("arcaneLaser") && !X.battlePoolNow().includes("arcaneLaser"));
   }
-  for (const [ids, expected] of [[['atk_m', 'def_m'], 1], [['charge', 'katana'], 2], [['atk_l'], 0], [['atk_s'], 0], [[], 0]]) {
+  for (const [ids, expected] of [[['atk_m', 'def_m'], 1], [['charge', 'katana'], 3], [['atk_l'], 1], [['atk_m'], 0], [['atk_s'], 0], [[], 0]]) {
     const { P } = start();
     P.hand = [...hand(...ids), D.cards.cake]; P.chips = ["recycle"];
     const coins = P.coins;
@@ -71,18 +71,18 @@ async function fire(m) {
     E.useSkill();
     assert.equal(P.hand.length, 8);
     assert.equal(P.hand.filter(c => c.id === "arcaneLaser").length, 4);
-    assert.match(w.document.getElementById("log").textContent, /1 张【魔导激光】未能获得/);
+    assert.match(w.document.getElementById("log").textContent, /2 张【魔导激光】未能获得/);
   }
   for (const n of [5, 6, 7, 8]) {
     const { P } = start(); P.hand = Array.from({ length: n }, () => D.cards.cake);
     X.startRound();
-    assert.equal(P.hand.length, n === 5 ? 6 : n);
-    assert.equal(P.hand.filter(c => c.id === "arcaneLaser").length, n === 5 ? 1 : 0);
+    assert.equal(P.hand.length, n <= 6 ? n + 1 : n);
+    assert.equal(P.hand.filter(c => c.id === "arcaneLaser").length, n <= 6 ? 1 : 0);
   }
   {
-    const { P } = start(); P.hand = Array.from({ length: 5 }, () => D.cards.cake); P.chips = ["lore1"];
+    const { P } = start(); P.hand = Array.from({ length: 6 }, () => D.cards.cake); P.chips = ["lore1"];
     X.startRound();
-    assert.equal(P.hand.length, 6);
+    assert.equal(P.hand.length, 7);
     assert.ok(!P.hand.some(c => c.id === "arcaneLaser"), "学识抽牌先结算，再检查手牌阈值");
   }
   {

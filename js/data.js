@@ -133,11 +133,11 @@ GAME_DATA.characters = {
     hpMax: 18, attack: 1, defense: 3,
     move: { dice: 1, faces: 10 }, initialCoins: 12,
     activeSkill: { name: "魔力回收", cooldown: 3,
-      desc: "丢弃所有战斗牌，费用合计每满 4 点获得 1 张【魔导激光】（余数不保留，遵守当前手牌上限）",
-      effect: "manaRecycle", card: "arcaneLaser", costPerCard: 4 },
+      desc: "丢弃所有战斗牌，费用合计每满 3 点获得 1 张【魔导激光】（余数不保留，遵守当前手牌上限）",
+      effect: "manaRecycle", card: "arcaneLaser", costPerCard: 3 },
     passiveSkill: { name: "魔导充能",
-      desc: "每回合开始时，若手牌不超过 5 张，获得 1 张【魔导激光】；每累计打出 2 张，之后所有魔导激光的伤害在本局永久 +1（初始 3 点，射程 8 格）",
-      effect: "arcaneCharge", card: "arcaneLaser", handLimit: 5, growth: 1, everyCards: 2 },
+      desc: "每回合开始时，若手牌不超过 6 张，获得 1 张【魔导激光】；每累计打出 2 张，之后所有魔导激光的伤害在本局永久 +1（初始 3 点，射程 8 格）",
+      effect: "arcaneCharge", card: "arcaneLaser", handLimit: 6, growth: 1, everyCards: 2 },
   },
 };
 
