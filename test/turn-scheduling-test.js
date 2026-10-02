@@ -54,6 +54,7 @@ function snapshot(E, logs) { return JSON.stringify({ state: E.state, logs }); }
         judgeQuests: () => events.push("quests"),
         moveAlly: (a, done) => { events.push(a.id); completions.push(done); },
         moveMonster: (m, done) => { events.push(`monster${m.uid}`); completions.push(done); },
+        endMonster: m => events.push(`endMonster${m.uid}`),
       },
     });
     turns.startRound(); turns.finishPlayerTurn(); turns.finishPlayerTurn();
@@ -61,7 +62,7 @@ function snapshot(E, logs) { return JSON.stringify({ state: E.state, logs }); }
     time.run(); completions[0](); completions[0]();
     completions[1](); completions[1]();
     completions[2](); completions[2](); time.run();
-    assert.deepEqual(events, ["round", "player", "endPlayer", "a", "b", "monster1", "quests", "round", "player"]);
+    assert.deepEqual(events, ["round", "player", "endPlayer", "a", "b", "monster1", "endMonster1", "quests", "round", "player"]);
     assert.equal(S.round, 2); assert.equal(S.aiBusy, false);
     completions.forEach(done => done());
     assert.equal(S.round, 2); assert.equal(time.pending.size, 0);
@@ -77,10 +78,11 @@ function snapshot(E, logs) { return JSON.stringify({ state: E.state, logs }); }
     const m = X.spawnMonster("dummy", 5); m.marks = 3;
     X.finishPlayerTurn(); X.finishPlayerTurn(); X.finishPlayerTurn();
     assert.equal(endings, 1); assert.equal(S.player.regen, 4);
-    assert.equal(S.player.buffs[0].turns, 2); assert.equal(m.marks, 2);
+    assert.equal(S.player.buffs[0].turns, 2); assert.equal(m.marks, 3);
     assert.equal(S._dbg.fpt, 1); assert.equal(time.pending.size, 1);
     assert.equal(S.aiBusy, true, "从排队开始即占用 AI 阶段");
     await pump(time, () => S.round === 2);
+    assert.equal(m.marks, 2, "该怪物行动结束只衰减一次");
     assert.equal(S._dbg.aiEnd, 1); assert.equal(S.phase, "play");
   }
 

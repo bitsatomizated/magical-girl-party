@@ -58,8 +58,8 @@ function setup(diff, mapName) {
   S3.player.pos = 0;
   const hp3 = S3.player.hp;
   await runAI(tao3);
-  check("噩梦映霞 3 + 精英×1 的 +1 = 4", hp3 - S3.player.hp === 4);
-  // 噩梦：场上 BOSS（不含精英）→ +1
+  check("噩梦映霞 3 + 自身与另一名精英的 +2 = 5", hp3 - S3.player.hp === 5);
+  // 噩梦：自身与一名 BOSS → +2
   const S3b = setup("nightmare");
   const tao3b = { uid: 903, def: mk("maid_sutaoyao"), name: "女仆苏桃夭", pos: 8, hp: 24, hpMax: 24, atk: 5, def_: 3, skillCd: 0, hunt: 0 };
   const boss3b = { uid: 904, def: mk("maid_yuncai"), name: "女仆晕彩", pos: 9, hp: 77, hpMax: 77, atk: 5, def_: 2, skillCd: 0, hunt: 0 };
@@ -67,7 +67,7 @@ function setup(diff, mapName) {
   S3b.player.pos = 0;
   const hp3b = S3b.player.hp;
   await runAI(tao3b);
-  check("噩梦映霞 3 + BOSS×1 的 +1 = 4", hp3b - S3b.player.hp === 4);
+  check("噩梦映霞 3 + 自身与 BOSS 的 +2 = 5", hp3b - S3b.player.hp === 5);
 
   // ---- [3] 经过时效果 ----
   console.log("[3] 经过时效果");

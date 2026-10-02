@@ -25,9 +25,9 @@ const of = (id) => E.state.monsters.filter(m => m.def.id === id);
     ["lab_wander", "lab_thunderbird", "lab_cerberus", "lab_chimera", "lab_variant"].every(id => !!M(id)));
   check("游荡魔物 5/3/0，4 金币", M("lab_wander").hpMax === 5 && M("lab_wander").attack === 3 && M("lab_wander").defense === 0 && M("lab_wander").coinDrop === 4);
   check("游荡魔物：主动攻击且不反击", M("lab_wander").tags.includes("aggressive") && !M("lab_wander").tags.includes("counter"));
-  check("雷鸟 8/3/2，8 金币，移速 3（基础 1 + 被动 2）",
+  check("雷鸟 8/3/2，8 金币，基础移动 1d10",
     M("lab_thunderbird").hpMax === 8 && M("lab_thunderbird").attack === 3 && M("lab_thunderbird").defense === 2 &&
-    M("lab_thunderbird").coinDrop === 8 && M("lab_thunderbird").move.steps === 3);
+    M("lab_thunderbird").coinDrop === 8 && M("lab_thunderbird").move.steps === 1);
   check("雷鸟：不主动攻击但会反击，且带掠过伤害被动",
     !M("lab_thunderbird").tags.includes("aggressive") && M("lab_thunderbird").tags.includes("counter") &&
     M("lab_thunderbird").passives.some(p => p.effect === "passDamage"));
@@ -223,10 +223,11 @@ const of = (id) => E.state.monsters.filter(m => m.def.id === id);
   const boss3 = X.makeMonster(M("lab_variant"), 16);
   S.monsters.push(boss3, X.makeMonster(M("lab_wander"), 15), X.makeMonster(M("lab_wander"), 17));
   S.round = 3;
-  boss3.skillCd = 1;
+  boss3.skillCd = 0;
   check("驻守标记生效（move.stationary）", boss3.def.move.stationary === true);
   E.state.monsters.forEach(m => { m.fusedRound = undefined; });
-  check("驻守怪不在移动序列里被跳过技能（技能由 aiTurns 直接结算）", typeof X.runMonsterSkill === "function");
+  X.runMonsterSkill(boss3);
+  check("变彩融合技能照常结算", boss3.skillCd === 2 && !S.monsters.some(m => m.def.id === "lab_wander"));
 
   console.log(`\n== 结果：通过 ${pass}，失败 ${fail} ==`);
   process.exit(fail ? 1 : 0);

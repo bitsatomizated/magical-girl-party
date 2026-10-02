@@ -62,7 +62,7 @@ assert(P.hp === 8, `再生 3 层回合开始回 3 血（实际 HP=${P.hp}）`);
 T.turnEndEffects();
 assert(P.regen === 1, `回合结束层数减半 3→1（实际 ${P.regen}）`);
 
-// ---- 5. 标记词条：受伤+1/层；回合结束-1层 ----
+// ---- 5. 标记词条：受伤+1/层；该怪物回合结束-1层 ----
 console.log("[5] 标记");
 const mob = S.monsters.find(m => m.def.category === "elite"); // 用精英：避免被测试伤害击倒移出列表
 mob.marks = 2;
@@ -71,7 +71,9 @@ const dealt = T.dealToMonster(mob, 5);
 assert(dealt === 7, `5 点基础伤害 +2 层标记 = 7（实际 ${dealt}）`);
 assert(mob.hp === before - 7, "怪物 HP 正确扣减");
 T.turnEndEffects();
-assert(mob.marks === 1, `回合结束标记 2→1（实际 ${mob.marks}）`);
+assert(mob.marks === 2, "玩家回合结束不衰减怪物标记");
+T.monsterTurnEndEffects(mob);
+assert(mob.marks === 1, `该怪物回合结束标记 2→1（实际 ${mob.marks}）`);
 
 // ---- 5b. 猎印命中挂标记（marksOnHit 结算）----
 console.log("[5b] 猎印命中挂标记");

@@ -45,6 +45,7 @@ function withMonster(S, id, uid, pos) {
 console.log("[1] 被动技能显示（普通难度：难度限定的被动不显示）");
 const S1 = start("normal");
 const h1 = infoHTML();
+check("图鉴移动展示为 1d10", h1.includes("每回合 1d10 格") && !h1.includes("每回合 1 格"));
 check("不显示仅噩梦/疯狂生效的【女仆链接】", !h1.includes("女仆链接"));
 check("显示【晕彩救援】被动及其效果", h1.includes("被动【晕彩救援】") && h1.includes("晕彩在升星点登场"));
 check("不出现难度标注之类的冗余文案",

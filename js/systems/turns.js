@@ -106,6 +106,7 @@
           if (monster.hp <= 0 || monster.fusedRound === S.round) continue;
           if (monster.skillCd > 0) monster.skillCd--;
           const done = once(() => {
+            rules.endMonster(monster);
             render();
             timer(() => { if (active()) next(); }, aiDelay);
           }, active);

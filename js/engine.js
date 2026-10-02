@@ -50,6 +50,7 @@ window.Engine = (() => {
     rules: {
       startRound: prepareRound, startPlayer: beginPlayerEffects, endPlayer: settlePlayerTurnEnd,
       judgeQuests, gameOver, moveAlly: allyMove, moveMonster: aiMove, monsterSkill: runMonsterSkill,
+      endMonster: monsterTurnEndEffects,
       stepPlayer, stepAlly, stepMonster, passTile: passThroughTile, landTile: settleLandTile,
     },
   });
@@ -317,14 +318,28 @@ window.Engine = (() => {
       if (targets.length) log(`【${c.name}】回合开始：${targets.length} 只怪物获得 ${c.auraMarks} 层标记。`, "good");
     });
     buffSum("heal") > 0 && (() => { const h = Math.min(buffSum("heal"), P.hpMax - P.hp); if (h > 0) { P.hp += h; log(`【以毒攻毒】回合开始：回复 ${h} 生命。`, "good"); } })();
+    tickBuffs(true); // 回血效果按触发次数计时，满血时也消耗一次。
   }
 
-  // 回合结束词条：再生层数减半 / 怪物标记 -1 层 / buff 持续回合递减
+  function tickBuffs(atStart) {
+    S.player.buffs = S.player.buffs.filter(b => {
+      if (!!b.heal !== atStart) return true;
+      b.turns--;
+      if (b.turns <= 0) { log(`效果【${b.name}】结束。`); return false; }
+      return true;
+    });
+  }
+
+  // 玩家回合结束：再生层数减半 / 非回血 buff 持续回合递减。
   function turnEndEffects() {
     const P = S.player;
     if (P.regen > 0) { P.regen = Math.floor(P.regen / 2); if (P.regen === 0) log("【再生】层数耗尽。"); }
-    S.monsters.forEach(m => { if (m.marks > 0) { m.marks--; if (m.marks === 0) log(`【${m.name}】的标记消退。`); } });
-    P.buffs = P.buffs.filter(b => { b.turns--; if (b.turns <= 0) { log(`效果【${b.name}】结束。`); return false; } return true; });
+    tickBuffs(false);
+  }
+
+  // 每只怪物自己的行动（含战斗）结束后衰减，使魔行动期间保留标记。
+  function monsterTurnEndEffects(m) {
+    if (m.marks > 0) { m.marks--; if (m.marks === 0) log(`【${m.name}】的标记消退。`); }
   }
 
   function buffSum(key) { return S.player.buffs.reduce((s, b) => s + (b[key] || 0), 0); }
@@ -713,7 +728,13 @@ window.Engine = (() => {
       onPassShop();
     }
     else if (tile.t === "chipshop") await openChipShop();
+    else if (tile.t === "draw") onPassDraw();
     return "done";
+  }
+
+  function onPassDraw() {
+    const n = chipSum("drawPass");
+    for (let i = 0; i < n; i++) if (drawCard(true)) log("【学识】拿牌格加抽 1 张牌。");
   }
 
   // 返回值：疾行追加步数；其余 0。async：升级后需等待筹码 3 选 1
@@ -734,7 +755,7 @@ window.Engine = (() => {
       case "damage": playerTakesDamage(2, "掉血地块"); checkPlayerKo(); break;
       case "draw": {
         drawCard(); drawCard();
-        const n = chipSum("drawPass"); for (let i = 0; i < n; i++) if (drawCard(true)) log("【学识】拿牌格加抽 1 张牌。");
+        onPassDraw();
         break;
       }
       case "upgrade": {
@@ -1514,7 +1535,7 @@ window.Engine = (() => {
       settleLandTile, randomEvent, startBattle, monsterAttack, passByEffects, offerTileFight, stopPrompt,
       addChip, genChipChoices, chipList, schoolsHeld, judgeQuests,
       computeAttack, playerTakesDamage, dealToMonster, onHitEnemy, onCardPlayed,
-      turnStartEffects, turnEndEffects, derived,
+      turnStartEffects, turnEndEffects, monsterTurnEndEffects, derived,
       // 卡牌实验室机制（card-lab-mechanics-test 专用）
       makeMonster, spawnMonster, monstersAt, rollNextStep, runMonsterSkill,
       devourMinion, absorbMinions, auraBonus, effAtk, effDef, freeTilesNear, spawnNear, stepMonster,

@@ -204,7 +204,8 @@ window.UI = (() => {
         `<br><span class="mob-passive">被动【${p.name || p.effect || "未知"}】</span>${p.desc || ""}`).join("");
       const tags = d.tags.map(t => TAG_CN[t] || t).join("、") || "—";
       const mv = d.move || {};
-      const moveTxt = mv.stationary ? "驻守不动" : `每回合 ${mv.steps ?? 1} 格${d.tags.includes("aggressive") ? "，朝你逼近" : "，不主动靠近"}`;
+      const moveBonus = (mv.steps || 1) - 1;
+      const moveTxt = mv.stationary ? "驻守不动" : `每回合 1d10${moveBonus ? ` + ${moveBonus}` : ""} 格${d.tags.includes("aggressive") ? "，朝你逼近" : "，不主动靠近"}`;
       // 守方倾向：不配置就是默认防御，写了等于没写；只有会进入闪避姿态的怪才标出来
       const dv = d.defend;
       const dvStances = !dv ? [] : dv.rule === "always" ? [dv.stance]

@@ -27,7 +27,7 @@ GAME_DATA.cards = {
   diceCtrl: { id: "diceCtrl", name: "遥控骰子", type: "effect", kind: "moveMod", fixedDice: true,         desc: "选择 1~6 的数字，下次移动固定走该点数" },
   king:     { id: "king",     name: "王之力",   type: "effect", kind: "buff", hpCost: 4, atk: 5, turns: 3, desc: "失去 4 生命，3 回合攻击 +5" },
   berserk:  { id: "berserk",  name: "狂暴",     type: "effect", kind: "buff", atk: 3, dmgTaken: 1, turns: 2, desc: "2 回合攻击 +3，受到伤害 +1" },
-  poison:   { id: "poison",   name: "以毒攻毒", type: "effect", kind: "buff", hpCost: 2, heal: 3, turns: 2, desc: "失去 2 生命，2 回合内回合开始时回复 3 生命" },
+  poison:   { id: "poison",   name: "以毒攻毒", type: "effect", kind: "buff", hpCost: 2, heal: 3, turns: 2, desc: "失去 2 生命，接下来 2 次自己的回合开始时各回复 3 生命" },
   cake:     { id: "cake",     name: "蛋糕",     type: "effect", kind: "heal", heal: 2, desc: "回复 2 点生命" },
   burger:   { id: "burger",   name: "汉堡",     type: "effect", kind: "heal", heal: 4, desc: "回复 4 点生命" },
 };
@@ -67,7 +67,7 @@ GAME_DATA.chips = {
   lf1:     { name: "生命之力 I",  school: "再生", rarity: "purple", fullHpAtk: 2, desc: "满血时攻击力 +2 + 当前再生层数（每枚生命之力独立结算再生加成）" },
   lf2:     { name: "生命之力 II", school: "再生", rarity: "gold",   fullHpAtk: 4, desc: "满血时攻击力 +4 + 当前再生层数（每枚生命之力独立结算再生加成）" },
   buffer:  { name: "缓冲",      school: "再生", rarity: "blue", onHurtRegen: 2, desc: "受到伤害后获得 2 层再生" },
-  // 标记（被标目标受伤 +1/层，回合结束 -1 层，跨回合持续）
+  // 标记（被标目标受伤 +1/层，该怪物回合结束 -1 层，跨回合持续）
   hunter1: { name: "猎印 I",   school: "标记", rarity: "blue",   marksOnHit: 1, desc: "攻击命中敌人后，目标获得 1 层标记" },
   hunter2: { name: "猎印 II",  school: "标记", rarity: "purple", atk: 2, marksOnHit: 2, desc: "攻击力 +2；攻击命中敌人后，目标获得 2 层标记" },
   hunter3: { name: "猎印 III", school: "标记", rarity: "gold",   marksOnHit: 3, atkPerMark: true, desc: "攻击目标时，攻击力 +目标标记层数；攻击命中后，目标获得 3 层标记" },
@@ -153,7 +153,7 @@ GAME_DATA.monsters = {
                crazy:     { hpMax: 30, attack: 5 },
              },
              skill: { name: "映霞", cooldown: 3, effect: "yuxiaShot",
-                      desc: "回合开始时对全图的你远程射击，造成 3 点伤害（噩梦/疯狂难度下，场上每有一名精英或 BOSS 再 +1）",
+                      desc: "回合开始时对全图的你远程射击，造成 3 点伤害（噩梦/疯狂难度下，场上每有一名精英或 BOSS 再 +1，包含自身）",
                       value: 3, bonusPerStrong: { normal: 0, hard: 0, nightmare: 1, crazy: 1 }, strongCategories: ["elite", "boss"] },
              passives: [
                { name: "骑士守护", desc: "经过女仆缇娜时，恢复其3点生命并使其下次战斗攻防+3", effect: "knightGuard", targets: ["maid_tina"], heal: 3, atk: 3, def: 3 },
@@ -211,7 +211,7 @@ GAME_DATA.monsters = {
              } },
   sentinel:{ id: "sentinel",name: "哨兵机兵", category: "elite",  hpMax: 18, attack: 3, defense: 2,
              art: { full: "assets/chars/mob_sentinel_mech_full.png" },
-             move: { steps: 2 }, coinDrop: 12, tags: ["aggressive"],
+             move: { steps: 1 }, coinDrop: 12, tags: ["aggressive"],
              defend: { rule: "always", stance: "defend" },
              skill: { name: "锁定", cooldown: 2, desc: "发起战斗时，本次战斗自身骰点+2", effect: "selfDicePlus", value: 2 },
              diffStats: {
@@ -241,10 +241,10 @@ GAME_DATA.monsters = {
                nightmare: { hpMax: 6,  attack: 4 },
                crazy:     { hpMax: 7,  attack: 4 },
              } },
-  // 卡牌·雷鸟：不主动攻击、但会反击；移速 3（基础 1 + 被动 2），掠过玩家即造成自身攻击力的伤害
+  // 卡牌·雷鸟：不主动攻击、但会反击；基础移动 1d10，掠过玩家即造成自身攻击力的伤害
   lab_thunderbird: { id: "lab_thunderbird", name: "卡牌·雷鸟", category: "elite", hpMax: 8, attack: 3, defense: 2,
              art: { full: "assets/chars/elite_lab_thunderbird_full.png" },
-             move: { steps: 3 }, coinDrop: 8, tags: ["passive", "counter"], numbered: true,
+             move: { steps: 1 }, coinDrop: 8, tags: ["passive", "counter"], numbered: true,
              passives: [ { name: "掠影", desc: "移动经过你时，造成等同于自身攻击力的伤害", effect: "passDamage", multiplier: 1 } ],
              diffStats: {
                hard:      { hpMax: 9 },
@@ -294,11 +294,11 @@ GAME_DATA.monsters = {
 
 // ---- 可选地图注册表 ----
 GAME_DATA.maps = {
-  // 新手教学地图：单环 20 格 + 驻守 BOSS 毕业考；节奏平缓，逐轮引入刷怪与全局强化
+  // 新手教学地图：单环 20 格 + BOSS 毕业考；节奏平缓，逐轮引入刷怪与全局强化
   tutorial_ring: {
     id: "tutorial_ring",
     name: "练习环道",
-    intro: "这是一条用于热身的练习环道。沿着环道前进，熟悉移动、战斗、商店与筹码的玩法；行至深处，驻守的灾厄核心将是你出师前的最后一考。",
+    intro: "这是一条用于热身的练习环道。沿着环道前进，熟悉移动、战斗、商店与筹码的玩法；灾厄核心将是你出师前的最后一考。",
     rounds: 12,
     fixedDifficulty: "normal", // 教学图锁定普通难度，选关界面灰掉其余难度
   bossTile: 10, // BOSS 刷新位置与格型解耦：10 号格现为疾行格，BOSS 仍刷在此处

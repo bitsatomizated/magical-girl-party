@@ -92,7 +92,7 @@
         let damage = valueAt(p.value);
         const per = valueAt(p.bonusPerStrong) || 0;
         if (per) {
-          const count = S.monsters.filter(x => x !== m && x.hp > 0 && p.strongCategories.includes(x.def.category)).length;
+          const count = S.monsters.filter(x => x.hp > 0 && p.strongCategories.includes(x.def.category)).length;
           damage += count * per;
           if (count) log(`【${p.name}】强化：场上每名精英/BOSS +${per} 伤害（共 +${count * per}）。`, "warn");
         }
