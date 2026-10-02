@@ -148,7 +148,7 @@ window.Engine = (() => {
         return adj;
       })(),
       player: {
-        name: p.name, hp: p.hpMax, hpMax: p.hpMax, atk: p.attack, def: p.defense,
+        id: p.id, name: p.name, hp: p.hpMax, hpMax: p.hpMax, atk: p.attack, def: p.defense,
         star: 0, coins: p.initialCoins, pos: m.startTile,
         hand: [], chips: [], wealth: 0, regen: 0,
         skillCd: 0, atkBuffNextBattle: 0, moveBonus: 0, speedBonus: 0, turnMoveBonus: 0, buffs: [],
@@ -974,16 +974,25 @@ window.Engine = (() => {
     return false;
   }
 
-  // 升级树：1星+1攻+2血上限+1移速；2星+2攻+2移速；3星+2攻+2移速（累计移速 +5，节奏随投资推进）
+  // 升星树（角色差异化，只强化角色本身）：
+  //   安叶/洛可可：1★ +1防+2血+1速；2★ +2速；3★ +2攻+2速（攻+2 防+1 血+2 速+5）
+  //   像素喵喵：  1★ +2攻+1速；2★ +2攻+2速；3★ +3攻+2速（攻+7 速+5）
+  const STAR_TREES = {
+    char_anye:       { 1: { def: 1, hp: 2, speed: 1 }, 2: { speed: 2 }, 3: { atk: 2, speed: 2 } },
+    char_rococo:     { 1: { def: 1, hp: 2, speed: 1 }, 2: { speed: 2 }, 3: { atk: 2, speed: 2 } },
+    char_pixel_meow: { 1: { atk: 2, speed: 1 }, 2: { atk: 2, speed: 2 }, 3: { atk: 3, speed: 2 } },
+  };
   function applyStarGrowth(star) {
     const P = S.player;
     S.chipRefreshLeft = (S.chipRefreshLeft || 0) + 1;
-    P.speedBonus += (star === 1 ? 1 : 2);
-    log(`筹码刷新次数 +1，移动速度 +${star === 1 ? 1 : 2}（永久，现 +${P.speedBonus}）。`);
-    if (star === 1) { P.atk += 1; P.hpMax += 2; P.hp += 2; log(`升级！当前 ${star} 星：攻击+1，血上限+2。`, "good"); }
-    else if (star === 2) { P.atk += 2; log(`升级！当前 ${star} 星：攻击+2。`, "good"); }
-    else if (star === 3) { P.atk += 2; log(`升级！当前 ${star} 星：攻击+2。`, "good"); }
-    else log(`升级！当前 ${star} 星。`, "good");
+    const g = (STAR_TREES[P.id] || STAR_TREES.char_rococo)[star] || {};
+    const parts = [];
+    if (g.atk) { P.atk += g.atk; parts.push(`攻击+${g.atk}`); }
+    if (g.def) { P.def += g.def; parts.push(`防御+${g.def}`); }
+    if (g.hp) { P.hpMax += g.hp; P.hp += g.hp; parts.push(`血上限+${g.hp}`); }
+    if (g.speed) { P.speedBonus += g.speed; parts.push(`移动速度+${g.speed}`); }
+    log(`筹码刷新次数 +1。`, "good");
+    if (parts.length) log(`升级！当前 ${star} 星：${parts.join("，")}。`, "good");
   }
 
   // 事件池（8 条，均匀随机各 12.5%）：条目与数值见设计文档 07 §8
@@ -1883,7 +1892,7 @@ window.Engine = (() => {
       fireRoundStartEffects, spawnSpotsFor, tilesOf, defeatMonster,
       // 洛可可 / 甜品使魔（rococo-test 专用）
       spawnFamiliar, stepAlly, allyStrike, monsterStrikeAlly, defeatMonsterByAlly, allyTurns, healPassAllies,
-      battlePoolNow, drawCard,
+      battlePoolNow, drawCard, applyStarGrowth,
     },
     get state() { return S; },
   };
