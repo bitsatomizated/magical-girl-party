@@ -1224,9 +1224,31 @@ window.Engine = (() => {
     const a = { uid: ++S.allySeq, def, name: `${def.name}${S.allySeq}`, pos,
       hp: def.hpMax, hpMax: def.hpMax,
       atk: def.attack + (S.famAtkBonus || 0), def: def.defense,
-      nextMoveBonus: 0, firstStep: null }; // firstStep：登场时玩家指定的初始移动方向
+      nextMoveBonus: 0, firstStep: null, // firstStep：登场时玩家指定的初始移动方向
+      lastFrom: null, queuedNext: null }; // 来路继承与预掷方向：与怪物同一套「不掉头」通则
     S.allies.push(a);
+    rollAllyNext(a);
     return a;
+  }
+
+  // 使魔方向预掷：首步优先玩家指定的初始方向；否则贪心追击最近怪物（并列距离随机）；
+  // 场上没有怪物时按通则继承来路方向前进（不掉头，死路才回头）。预告箭头与实际走位共用同一结果
+  function rollAllyNext(a) {
+    let pool;
+    if (a.firstStep != null && S.adj[a.pos].includes(a.firstStep)) {
+      pool = [a.firstStep];
+    } else {
+      const target = nearestMonster(a.pos);
+      const opts = a.lastFrom != null ? stepOptions(a.pos, a.lastFrom) : S.adj[a.pos].slice();
+      if (target) {
+        let bd = 1e9;
+        pool = [];
+        for (const o of opts) { const d = graphDist(o, target.pos); if (d < bd) { bd = d; pool = [o]; } else if (d === bd) pool.push(o); }
+      } else {
+        pool = opts; // 无怪可追：不掉头前进，岔路随机选（已预掷，预告即真相）
+      }
+    }
+    a.queuedNext = pool.length ? pool[rnd(pool.length)] : null;
   }
 
   // 甜品登场两段瞄准：
@@ -1240,6 +1262,7 @@ window.Engine = (() => {
       S.targeting = null;
       if (a && S.allies.includes(a)) {
         a.firstStep = pos;
+        rollAllyNext(a); // 方向已定：刷新预掷，预告箭头立即指向初始方向
         log(`【${a.name}】的初始移动方向已确定。`, "good");
       }
       window.UI.renderAll();
@@ -1341,27 +1364,25 @@ window.Engine = (() => {
     stepAlly();
   }
 
-  // 使魔移动：每步贪心逼近最近的怪物；进入怪物所在格即攻击格上所有怪物
+  // 使魔移动：按预掷方向走（预告即真相）；进入怪物所在格即攻击格上所有怪物
   async function stepAlly() {
     const mv = S.move;
     if (!mv || !mv.isAlly) return;
     const a = mv.who;
     while (mv.steps > 0 && !S.over && a.hp > 0) {
-      const opts = S.adj[a.pos];
-      if (!opts.length) break;
-      const target = nearestMonster(a.pos);
       let next;
-      if (a.firstStep != null && S.adj[a.pos].includes(a.firstStep)) {
-        next = a.firstStep; a.firstStep = null; // 登场时玩家指定的初始方向（仅首步）
-      } else if (target) {
-        next = opts[0];
-        let bd = graphDist(next, target.pos);
-        for (const o of opts) { const d = graphDist(o, target.pos); if (d < bd) { bd = d; next = o; } }
+      if (a.queuedNext != null && S.adj[a.pos].includes(a.queuedNext)) {
+        next = a.queuedNext; // 首选预掷方向（预告即真相）
       } else {
-        next = opts[rnd(opts.length)]; // 场上没有怪物：随机游走
+        rollAllyNext(a); // 无预掷记录 / 记录失效：兜底现掷
+        if (a.queuedNext == null || !S.adj[a.pos].includes(a.queuedNext)) break;
+        next = a.queuedNext;
       }
       mv.steps--;
+      a.lastFrom = a.pos; // 记录来路：下步不掉头（无怪可追时沿路继续）
       a.pos = next;
+      if (a.firstStep === next) a.firstStep = null; // 初始方向仅约束首步
+      rollAllyNext(a); // 落地即预掷下一步：预告箭头任何时刻都有解
       window.UI.renderAll();
       if (ANIM) await delay(ANIM);
       if (S.over || a.hp <= 0) break;
@@ -1810,17 +1831,10 @@ window.Engine = (() => {
     if (!m || m.hp <= 0) return null;
     return m.queuedNext ?? null;
   }
-  // 使魔下一步意向格：首步优先玩家指定的初始方向，否则按贪心追击最近怪物预演（与 stepAlly 同规则）
+  // 使魔下一步意向格：直接读预掷结果（与 stepAlly 实际走位共用同一结果，任何位置都有确定方向）
   function peekAllyNext(a) {
     if (!a || a.hp <= 0) return null;
-    const opts = S.adj[a.pos];
-    if (!opts.length) return null;
-    if (a.firstStep != null && opts.includes(a.firstStep)) return a.firstStep;
-    const target = nearestMonster(a.pos);
-    if (!target) return null;
-    let next = opts[0], bd = graphDist(next, target.pos);
-    for (const o of opts) { const d = graphDist(o, target.pos); if (d < bd) { bd = d; next = o; } }
-    return next;
+    return a.queuedNext ?? null;
   }
   // 防御/闪避前的数值预览：选姿态前就告知双方攻防与骰点加成
   function defensePreview(t) {
