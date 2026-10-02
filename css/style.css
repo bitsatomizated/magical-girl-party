@@ -121,6 +121,7 @@ main { display: flex; height: calc(100vh - 45px); }
 #board .arr-p { fill: #ffd76e; stroke: #14141f; stroke-width: 1; }
 #board .arr-m { fill: #ff6e6e; stroke: #14141f; stroke-width: 1; }
 #board .arr-boss { fill: #ff4dd2; stroke: #14141f; stroke-width: 1; }
+#board .arr-ally { fill: #5fe08a; stroke: #14141f; stroke-width: 1; }
 #board .arr-choice { opacity: .95; stroke: #fff; stroke-width: 1.5; stroke-dasharray: 3 2; }
 #board .target-ring { fill: rgba(255,90,90,.25); stroke: #ff5a5a; stroke-width: 3; }
 #board .target-lead { stroke: #ff5a5a; stroke-width: 2; stroke-dasharray: 4 3; opacity: .8; }

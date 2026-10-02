@@ -364,6 +364,13 @@ window.UI = (() => {
         const cls = m.def.category === "boss" ? "arr-boss" : "arr-m";
         svg += arrow(m.pos, n, 0.66, cls, (mi++ % 3) * 7);
       });
+      // 友方（甜品使魔）方向预告：绿色箭头，与 stepAlly 的实际走向同一套规则
+      (S.allies || []).forEach(a => {
+        if (a.hp <= 0) return;
+        const n = Engine.peekAllyNext(a);
+        if (n == null) return;
+        svg += arrow(a.pos, n, 0.66, "arr-ally", (mi++ % 3) * 7);
+      });
       // 瞄准模式：候选怪物按「目标编号」逐个标出（同格多怪水平排开，避免标记重叠、便于精确锁怪）
       // 甜品登场的瞄准对象是地块不是怪物，跳过（candidates 是地块编号，与怪物 uid 数值可能重叠）
       if (S.targeting && !S.targeting.deploy && !S.targeting.deployDir) {

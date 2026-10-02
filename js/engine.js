@@ -1810,6 +1810,18 @@ window.Engine = (() => {
     if (!m || m.hp <= 0) return null;
     return m.queuedNext ?? null;
   }
+  // 使魔下一步意向格：首步优先玩家指定的初始方向，否则按贪心追击最近怪物预演（与 stepAlly 同规则）
+  function peekAllyNext(a) {
+    if (!a || a.hp <= 0) return null;
+    const opts = S.adj[a.pos];
+    if (!opts.length) return null;
+    if (a.firstStep != null && opts.includes(a.firstStep)) return a.firstStep;
+    const target = nearestMonster(a.pos);
+    if (!target) return null;
+    let next = opts[0], bd = graphDist(next, target.pos);
+    for (const o of opts) { const d = graphDist(o, target.pos); if (d < bd) { bd = d; next = o; } }
+    return next;
+  }
   // 防御/闪避前的数值预览：选姿态前就告知双方攻防与骰点加成
   function defensePreview(t) {
     const b = S.battle, dv = derived();
@@ -1826,7 +1838,7 @@ window.Engine = (() => {
   return {
     newGame, useSkill, playCard, finishPlayPhase, rollAndMove, answerAsk,
     playerBattlePoints, playBattleCard, playerPlayBattleCard: playBattleCard, resolvePlayerAttack, playerChooseStance,
-    attackPreview, defensePreview, pickMoveStep, peekPlayerNext, peekPlayerOptions, peekNext, graphDist,
+    attackPreview, defensePreview, pickMoveStep, peekPlayerNext, peekPlayerOptions, peekNext, peekAllyNext, graphDist,
     buyShop, closeShop, pickChip, chipShopPrice, chooseTarget, cancelTargeting, refreshChips,
     chooseDeployTile,
     derived,
