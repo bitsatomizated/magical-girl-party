@@ -88,7 +88,10 @@
       },
     }, { value: "nonnegative", maxCharges: "nonnegativeInt", flameGrowth: "nonnegative" });
     effects.register("huntOnPass", {
-      monsterPassPlayer(p, { monster }) {
+      monsterEnterPlayer(p, { monster }) {
+        const P = getState().player;
+        P.nextTurnSpeedBonus += p.passSpeed || 0;
+        if (p.passSpeed) log(`【${p.name}】：下回合移动速度 +${p.passSpeed}（已累计 +${P.nextTurnSpeedBonus}）。`, "good");
         monster.hunt = (monster.hunt || 0) + p.stacks;
         log(`【${p.name}】发动：【${monster.name}】路过玩家，获得 ${p.stacks} 层【追猎】（现 ${monster.hunt}）。`, "good");
       },
@@ -111,7 +114,7 @@
           log(`【${p.name}】击倒带【追猎】的敌人：抽取 1 张战斗牌【${card.name}】。`, "good");
         }
       },
-    }, { value: "nonnegative", stacks: "nonnegativeInt", drawOnKill: "boolean", consumeOnAttack: "boolean" });
+    }, { value: "nonnegative", stacks: "nonnegativeInt", drawOnKill: "boolean", consumeOnAttack: "boolean", "passSpeed?": "nonnegativeInt" });
     effects.register("healingPass", {
       playerPassAlly(p, { pos }) {
         for (const a of getState().allies) {

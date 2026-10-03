@@ -38,8 +38,12 @@ function check(name, cond) { cond ? (pass++, console.log("  ✓ " + name)) : (fa
   const m = S.monsters.find(x => x.def.tags.includes("aggressive"));
   m.pos = n - 1; m.def.move.steps = 1; // 下一步必然路过玩家所在格
   m.initRandom = false; // 本项验证「路过施加追猎」：关闭生成时的随机方向（该规则由 maid-events-test 覆盖）
+  m.queuedNext = P.pos;
   const huntBefore = m.hunt || 0, hpBefore = P.hp;
-  await new Promise((res) => X.aiMove(m, res));
+  const originalRandom = Math.random;
+  Math.random = () => 0; // 固定移动骰为1，只经过玩家一次。
+  try { await new Promise((res) => X.aiMove(m, res)); }
+  finally { Math.random = originalRandom; }
   await sleep(20);
   check("怪物路过获得 1 层追猎", (m.hunt || 0) === huntBefore + 1);
   check("像素化期间未被主动攻击", P.hp === hpBefore);

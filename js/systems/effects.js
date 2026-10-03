@@ -1,6 +1,12 @@
 // 技能时机与同步分发。处理器只在引擎显式到达时机时运行，不注册全局监听器。
 (function () {
   const TIMINGS = Object.freeze(Object.fromEntries(Object.entries({
+    monsterEnterPlayer: { scope: "角色被动", at: "存活敌人移动进入未倒地玩家格，每次经过触发，不受本次已攻击限制", context: "monster" },
+    monsterQuestComplete: { scope: "怪物主动", at: "轮末血量胜利任务完成时、结算胜利之前；包含已被击倒的目标", context: "monster" },
+    npcTurnStart: { scope: "NPC主动/被动", at: "NPC缠绕结算、冷却递减后，移动前", context: "npc" },
+    npcTraits: { scope: "NPC被动", at: "查询飞行与全友方移速光环，不修改状态", context: "npc, speedAura, noActiveAttack, noCounter", preview: true },
+    npcHit: { scope: "NPC被动", at: "NPC造成伤害后、敌人反击前", context: "npc, target, damage" },
+    monsterProtection: { scope: "怪物被动", at: "主动攻击、效果牌锁定、地块伤害的许可查询", context: "monster, attack, card, tile", preview: true },
     playerInit: { scope: "角色被动", at: "新对局状态创建后、起始抽牌和刷怪前", context: "无" },
     playerActive: { scope: "角色主动", at: "出牌阶段通过操作许可检查后", context: "deferred：选目标时延后冷却" },
     playerTurnStart: { scope: "角色被动", at: "回合开始筹码结算后、进入出牌阶段前", context: "无" },

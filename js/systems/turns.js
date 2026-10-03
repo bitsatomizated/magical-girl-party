@@ -89,6 +89,23 @@
           rules.moveAlly(ally, once(next, active));
           return;
         }
+        startNpcs();
+      };
+      next();
+    }
+    function startNpcs() {
+      const S = getState(), active = turnCheckpoint();
+      stage = "npcs"; S.phase = "turnEnd";
+      const list = (S.npcs || []).slice();
+      let index = 0;
+      const next = () => {
+        if (!active()) return;
+        while (index < list.length) {
+          const npc = list[index++];
+          if (npc.hp <= 0 || !S.npcs.includes(npc)) continue;
+          rules.moveNpc(npc, once(next, active));
+          return;
+        }
         startMonsters();
       };
       next();

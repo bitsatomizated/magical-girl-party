@@ -113,7 +113,7 @@ check("分身掉落 8 金币", S6c.player.coins >= 16);
 console.log("[7] 胜利条件：晕彩救援刷出的 BOSS 被击败即获胜");
 const S7 = setup();
 const an7 = at(S7, "maid_anruosu")[0];
-X.dealToMonster(an7, 11); // 普通难度安若素 14 血：11 伤后剩 3 < floor(14*0.3)=4 → 触发救援
+X.dealToMonster(an7, an7.hpMax - Math.floor(an7.hpMax * 0.3) + 1); // 降至30%阈值以下，触发救援
 const yc7 = at(S7, "maid_yuncai")[0];
 check("晕彩在升级点（21）登场且方向随机", !!yc7 && yc7.pos === 21 && yc7.initRandom === true);
 X.dealToMonster(yc7, 9999);

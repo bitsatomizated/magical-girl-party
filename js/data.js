@@ -21,8 +21,8 @@ GAME_DATA.cards = {
   brick:    { id: "brick",    name: "板砖",     type: "effect", kind: "damage", range: 3, dmg: 5,       desc: "3 格内一个怪物受 5 点伤害" },
   cannon:   { id: "cannon",   name: "轨道炮",   type: "effect", kind: "damage", range: 5, dmg: 6,       desc: "5 格内一个怪物受 6 点伤害" },
   laser:    { id: "laser",    name: "激光",     type: "effect", kind: "damage", range: 6, dmg: 3,       desc: "6 格内一个怪物受 3 点伤害" },
-  arcaneLaser: { id: "arcaneLaser", name: "魔导激光", type: "effect", kind: "damage", range: 8, dmg: 3, exclusive: true,
-    desc: "指定8格内一名怪物，造成3点伤害" },
+  arcaneLaser: { id: "arcaneLaser", name: "魔导激光", type: "effect", kind: "damage", range: 8, dmg: 2, exclusive: true,
+    desc: "指定8格内一名怪物，造成2点伤害" },
   demo:     { id: "demo",     name: "定向爆破", type: "effect", kind: "damage", range: 6, dmg: 4, aoe: 2, desc: "6 格内一个怪物及其周围 2 格内怪物各受 4 点伤害" },
   hurry:    { id: "hurry",    name: "加急加快", type: "effect", kind: "moveMod", doubleDice: true,        desc: "下次移动掷两个骰子" },
   dirChoose:{ id: "dirChoose",name: "方向抉择", type: "effect", kind: "moveMod", chooseDir: true,         desc: "下次移动首步自选方向（可掉头），后续不能掉头" },
@@ -95,10 +95,10 @@ GAME_DATA.characters = {
     move: { dice: 1, faces: 10 },
     initialCoins: 12,
     activeSkill: { name: "青鸾雏焰", cooldown: 3,
-      desc: "本回合移动速度 +2；本次移动经过的节点均被青焰环绕（含起点与终点），持续到下回合开始，敌人经过青焰地块受到 2 点伤害",
+      desc: "本回合移动速度+2，且移动经过的地块留下持续至下回合开始的青焰，对经过的敌人造成2点伤害。",
       effect: "azureFlame", value: 2, moveBonus: 2 },
     passiveSkill: { name: "凤凰再生",
-      desc: "即将被击倒时免疫该伤害，失去 4 点最大生命并回满，青焰伤害永久 +1；发动三次后失效",
+      desc: "玩家受到致命伤害时，免疫该次伤害，失去4点最大生命并回复全部生命，同时使青焰伤害在本局永久+1。每局限3次。",
       effect: "phoenixReborn", value: 4, maxCharges: 3, flameGrowth: 1 },
   },
   char_pixel_meow: {
@@ -109,8 +109,8 @@ GAME_DATA.characters = {
     hpMax: 20, attack: 3, defense: 1,
     move: { dice: 1, faces: 10 },
     initialCoins: 12,
-    activeSkill: { name: "像素化", cooldown: 3, desc: "本回合攻击力+4，且不会被怪物主动攻击，持续到下回合开始", effect: "pixelate", value: 4 },
-    passiveSkill: { name: "喵之追猎", desc: "被怪物路过时，对怪物施加 1 层【追猎】；攻击带【追猎】的敌人时攻击力+3；击倒带【追猎】的敌人后，随机抽取 1 张战斗牌", effect: "huntOnPass", value: 3, stacks: 1, drawOnKill: true, consumeOnAttack: false },
+    activeSkill: { name: "像素化", cooldown: 3, desc: "下回合开始前，攻击力+4，且无法被怪物主动攻击。", effect: "pixelate", value: 4 },
+    passiveSkill: { name: "喵之追猎", desc: "被怪物路过时，下回合移速+1，并对怪物施加1层【追猎】；攻击带【追猎】的敌人时攻击力+3；击倒带【追猎】的敌人后，随机抽取1张战斗牌。", effect: "huntOnPass", passSpeed: 1, value: 3, stacks: 1, drawOnKill: true, consumeOnAttack: false },
   },
   char_rococo: {
     id: "char_rococo", name: "洛可可",
@@ -120,10 +120,10 @@ GAME_DATA.characters = {
     move: { dice: 1, faces: 10 },
     initialCoins: 12,
     activeSkill: { name: "甜品登场", cooldown: 3,
-      desc: "指定 3 格内一个地块，生成一个甜品使魔；所有甜品使魔的最大生命 +2、攻击力 +1（全局生效，含此后生成的）",
+      desc: "指定3格内一个地块，生成一个甜品使魔，然后使所有甜品使魔的最大生命+2、攻击力 +1。",
       effect: "sweetDeploy", summon: "dessert_familiar", range: 3, growth: { atk: 1, hp: 2 } },
     passiveSkill: { name: "治愈魔法",
-      desc: "路过甜品使魔时，回复其 5 点生命，并使该甜品使魔下次移动速度 +3",
+      desc: "路过甜品使魔时，回复其5点生命，并使该甜品使魔下次移动速度+3。",
       effect: "healingPass", value: 5, moveBonus: 3, targets: ["dessert_familiar"] },
   },
   char_xingmeng: {
@@ -133,10 +133,10 @@ GAME_DATA.characters = {
     hpMax: 18, attack: 1, defense: 3,
     move: { dice: 1, faces: 10 }, initialCoins: 12,
     activeSkill: { name: "魔力回收", cooldown: 3,
-      desc: "丢弃所有战斗牌，费用合计每满 3 点获得 1 张【魔导激光】（余数不保留，遵守当前手牌上限）",
+      desc: "丢弃所有战斗牌，每丢弃3点费用，获得1张【魔导激光】（向下取整） 。",
       effect: "manaRecycle", card: "arcaneLaser", costPerCard: 3 },
     passiveSkill: { name: "魔导充能",
-      desc: "每回合开始时，若手牌不超过 6 张，获得 1 张【魔导激光】；每打出 1 张，之后所有魔导激光的伤害在本局永久 +1（初始 3 点，射程 8 格）",
+      desc: "每回合开始时，若手牌不超过6张，获得1张【魔导激光】；每打出1张【魔导激光】，【魔导激光】的伤害永久+1。",
       effect: "arcaneCharge", card: "arcaneLaser", handLimit: 6, growth: 1, everyCards: 1 },
   },
 };
@@ -148,29 +148,64 @@ GAME_DATA.allies = {
     desc: "主动追击最近的怪物，攻击所有自己路过的怪物；享受目标已有的标记增伤，但不触发玩家筹码效果；击倒奖励与任务进度计入玩家" },
 };
 
+// 友方 NPC 独立于召唤物，依次在召唤物之后、敌人之前行动。
+GAME_DATA.npcs = {
+  npc_taoyao: { id: "npc_taoyao", name: "魔法少女·桃夭", hpMax: 26, attack: 5, defense: 2, move: { dice: 1, faces: 10 },
+    skill: { name: "映霞", effect: "npcShot", cooldown: 2, damage: 5, priority: ["tower_luoluo"], desc: "对随机一名敌人造成5点伤害，优先攻击珞珞，可穿透光学隐身" } },
+  npc_manzhushahua: { id: "npc_manzhushahua", name: "魔法少女·曼珠沙华", hpMax: 32, attack: 6, defense: 3, move: { dice: 1, faces: 10 },
+    passives: [{ name: "吸血恢复", effect: "npcLifesteal", ratio: 1, desc: "攻击造成伤害后，回复等同于造成伤害的生命值" }] },
+  npc_linglan: { id: "npc_linglan", name: "魔法少女·铃兰", hpMax: 18, attack: 4, defense: 2, move: { dice: 1, faces: 10 },
+    passives: [{ name: "队友链接", effect: "friendlySpeedAura", speed: 2, desc: "自身在场时，所有友方单位的移动速度+2" }] },
+  npc_baishuixian: { id: "npc_baishuixian", name: "魔法少女·白水仙", hpMax: 22, attack: 5, defense: 1, move: { dice: 1, faces: 10 },
+    passives: [{ name: "飞行", effect: "npcFlight", desc: "无法被怪物主动攻击，攻击怪物后不会被反击" }] },
+};
+
 GAME_DATA.monsters = {
+  // 女巫塔前：珞珞、小白掉落12金币，赤痕、变彩掉落16金币；友方击倒同样归玩家。
+  tower_luoluo: { id: "tower_luoluo", name: "珞珞", category: "elite", hpMax: 12, attack: 4, defense: 2,
+    move: { steps: 1 }, coinDrop: 12, tags: ["aggressive", "counter"], art: { full: "assets/chars/elite_tower_luoluo_full.png" },
+    diffStats: { hard: { hpMax: 14 }, nightmare: { hpMax: 16, attack: 5 }, crazy: { hpMax: 20, attack: 5 } },
+    passives: [{ name: "光学隐身", effect: "opticalCloak", desc: "无法被主动攻击或效果牌锁定，免疫地块效果伤害（含青焰）；范围波及与映霞仍可命中" }] },
+  tower_xiaobai: { id: "tower_xiaobai", name: "小白", category: "elite", hpMax: 18, attack: 4, defense: 3,
+    move: { steps: 1 }, coinDrop: 12, tags: ["aggressive", "counter"], art: { full: "assets/chars/elite_tower_xiaobai_full.png" },
+    diffStats: { hard: { hpMax: 20 }, nightmare: { hpMax: 22, attack: 5 }, crazy: { hpMax: 26, attack: 6 } } },
+  tower_chihen: { id: "tower_chihen", name: "赤痕", category: "elite", hpMax: 44, attack: 4, defense: 2,
+    move: { steps: 1 }, coinDrop: 16, tags: ["aggressive", "counter"], art: { full: "assets/chars/魔法少女赤痕.png" },
+    diffStats: { hard: { hpMax: 48 }, nightmare: { hpMax: 52, attack: 5 }, crazy: { hpMax: 60, attack: 6 } },
+    skill: { name: "裁光（劣化）", effect: "entangleFriendlies", cooldown: 3, stacks: 2, includePlayer: true, once: false, desc: "给予所有友方单位2层缠绕" },
+    passives: [{ name: "红外领域", effect: "infraredField", minDiff: "nightmare", range: 3, damage: 3, desc: "仅噩梦、疯狂难度：自身回合开始时，对3格范围内所有友方单位造成3点伤害" }] },
+  tower_variant: { id: "tower_variant", name: "变彩", category: "elite", hpMax: 32, attack: 3, defense: 2,
+    move: { steps: 1 }, coinDrop: 16, tags: ["aggressive", "counter"], art: { full: "assets/chars/boss_variant_full.jpg" },
+    diffStats: { hard: { hpMax: 34 }, nightmare: { hpMax: 36, attack: 4 }, crazy: { hpMax: 40, attack: 5 } },
+    skill: { name: "卡牌释放", effect: "releaseCards", cooldown: 3, mob: "lab_wander", count: 2, desc: "在随机两个不同地块各生成一只游荡魔物（独立于地图事件）" },
+    passives: [{ name: "魔物重塑", effect: "reshapeMinion", targets: ["lab_wander"], atk: 1, hp: 2, desc: "路过游荡魔物时使其攻击永久+1、最大生命+2；融合后继承双方累计强化" }] },
+  tower_yuncai: { id: "tower_yuncai", name: "魔法少女·晕彩", category: "boss", hpMax: 188, attack: 6, defense: 3,
+    move: { steps: 1 }, coinDrop: 0, tags: ["aggressive", "counter", "boss"], art: { full: "assets/chars/SSR_常驻___魔法少女_晕彩_.60d2e182.jpg" },
+    diffStats: { hard: { hpMax: 204 }, nightmare: { hpMax: 226, attack: 7 }, crazy: { hpMax: 264, attack: 8 } },
+    skill: { name: "裁光", effect: "finalLight", cooldown: 0, hpRatio: 0.5, stacks: 999, desc: "轮末任务结算时，生命为一半及以下则发动一次：给予所有在场友方NPC999层缠绕，然后立刻触发一次缠绕效果，击倒友方NPC并结束本关；不影响玩家和召唤物" },
+    passives: [{ name: "折光", effect: "flatReduction", reduction: 2, desc: "所有来源伤害-2（沿用伤害最低1规则）" }] },
   // ---- 女仆咖啡厅阵容 ----
   // 精英1：不主动攻击、可反击；噩梦/疯狂获得「女仆链接」；常驻「晕彩救援」
-  maid_anruosu: { id: "maid_anruosu", name: "女仆安若素", category: "elite", hpMax: 14, attack: 3, defense: 2,
+  maid_anruosu: { id: "maid_anruosu", name: "女仆安若素", category: "elite", hpMax: 18, attack: 3, defense: 2,
              art: { full: "assets/chars/elite_maid_anruosu_full.jpg" },
              move: { steps: 1 }, coinDrop: 12, tags: ["passive", "counter"],
              diffStats: {
-               hard:      { hpMax: 18 },
-               nightmare: { hpMax: 20, attack: 4 },
-               crazy:     { hpMax: 24, attack: 5 },
+               hard:      { hpMax: 22 },
+               nightmare: { hpMax: 24, attack: 4 },
+               crazy:     { hpMax: 28, attack: 5 },
              },
              passives: [
                { name: "女仆链接", desc: "经过其他敌人时，使其下次移动速度 +2（精英/BOSS 为 +4）", effect: "maidLink", minDiff: "nightmare", moveByCategory: { minion: 2, default: 4 } },
                { name: "晕彩救援", desc: "生命低于30%（向下取整）时，晕彩在升星点登场（限一次）", effect: "yuncaiRescue", threshold: 0.3, summon: "maid_yuncai", tileType: "upgrade", onceKey: "yuncaiRescued" },
              ] },
   // 精英2：主动攻击、不反击；主动技「映霞」回合触发全图射击；被动「骑士守护」经过缇娜时生效
-  maid_sutaoyao: { id: "maid_sutaoyao", name: "女仆苏桃夭", category: "elite", hpMax: 18, attack: 3, defense: 3,
+  maid_sutaoyao: { id: "maid_sutaoyao", name: "女仆苏桃夭", category: "elite", hpMax: 22, attack: 3, defense: 3,
              art: { full: "assets/chars/elite_maid_sutaoyao_full.jpg" },
              move: { steps: 1 }, coinDrop: 16, tags: ["aggressive"],
              diffStats: {
-               hard:      { hpMax: 22 },
-               nightmare: { hpMax: 24, attack: 4 },
-               crazy:     { hpMax: 30, attack: 5 },
+               hard:      { hpMax: 26 },
+               nightmare: { hpMax: 28, attack: 4 },
+               crazy:     { hpMax: 34, attack: 5 },
              },
              skill: { name: "映霞", cooldown: 3, effect: "yuxiaShot",
                       desc: "回合开始时对全图的你远程射击，造成 3 点伤害（噩梦/疯狂难度下，场上每有一名精英或 BOSS 再 +1，包含自身）",
@@ -179,13 +214,13 @@ GAME_DATA.monsters = {
                { name: "骑士守护", desc: "经过女仆缇娜时，恢复其3点生命并使其下次战斗攻防+3", effect: "knightGuard", targets: ["maid_tina"], heal: 3, atk: 3, def: 3 },
              ] },
   // 精英3：主动攻击、会反击；「鲜血汲取」攻击回复等量生命；「公主关注」经过苏桃夭刷新其技能CD
-  maid_tina: { id: "maid_tina", name: "女仆缇娜", category: "elite", hpMax: 22, attack: 4, defense: 2,
+  maid_tina: { id: "maid_tina", name: "女仆缇娜", category: "elite", hpMax: 26, attack: 4, defense: 2,
              art: { full: "assets/chars/elite_maid_tina_full.jpg" },
              move: { steps: 1 }, coinDrop: 16, tags: ["aggressive", "counter"],
              diffStats: {
-               hard:      { hpMax: 26 },
-               nightmare: { hpMax: 28, attack: 5 },
-               crazy:     { hpMax: 36, attack: 6 },
+               hard:      { hpMax: 30 },
+               nightmare: { hpMax: 32, attack: 5 },
+               crazy:     { hpMax: 40, attack: 6 },
              },
              passives: [
                { name: "鲜血汲取", desc: "攻击玩家后，恢复等同于造成伤害的生命值", effect: "bloodDrain", ratio: 1 },
@@ -203,13 +238,13 @@ GAME_DATA.monsters = {
              skill: { name: "析光", cooldown: 3, effect: "lightSplit", summon: "maid_yuncai_clone", copyStats: ["atk", "def_"],
                       desc: "回合开始生成一个晕彩分身（分身于本体行动后行动）" } },
   // 晕彩分身：攻防复制生成时本体数值；无技能；击败掉落 8 金币；与小怪一样按编号区分
-  maid_yuncai_clone: { id: "maid_yuncai_clone", name: "晕彩分身", category: "elite", numbered: true, hpMax: 10, attack: 4, defense: 2,
+  maid_yuncai_clone: { id: "maid_yuncai_clone", name: "晕彩分身", category: "elite", numbered: true, hpMax: 14, attack: 4, defense: 2,
              art: { full: "assets/chars/boss_maid_yuncai_full.jpg" },
              move: { steps: 1 }, coinDrop: 8, tags: ["aggressive", "counter"],
              diffStats: {
-               hard:      { hpMax: 12 },
-               nightmare: { hpMax: 12 },
-               crazy:     { hpMax: 14 },
+               hard:      { hpMax: 16 },
+               nightmare: { hpMax: 16 },
+               crazy:     { hpMax: 18 },
              } },
   maid_sprite: { id: "maid_sprite", name: "女仆精灵", category: "minion", hpMax: 8, attack: 2, defense: 0,
              art: { full: "assets/chars/mob_maid_sprite_full.webp" },
@@ -520,6 +555,71 @@ GAME_DATA.maps = {
       { desc: "击败卡牌·雷鸟或卡牌·三头犬 2 只", targets: ["lab_thunderbird", "lab_cerberus"], need: 2, rewardTier: 2 },
       { desc: "击败奇美拉 1 只", targets: ["lab_chimera"], need: 1, rewardTier: 3, extra: "roundProgressMinus1" },
       { desc: "击败卡牌·雷鸟或卡牌·三头犬 4 只", targets: ["lab_thunderbird", "lab_cerberus"], need: 4, rewardTier: 3 },
+    ],
+  },
+  // 第三张地图：女巫塔前，晕彩降至半血即获胜。
+  // 轮数及经济参数暂沿用现有地图，非最终平衡值。
+  witch_tower: {
+    id: "witch_tower", name: "女巫塔前",
+    intro: "L市的魔法少女们来到了【九幽】组织的基地，打算与她们决一死战。而你作为临时来到L市的魔法少女，也打算助她们一臂之力。然而，这场战斗的跌宕程度远远超出了大家的预期......",
+    rounds: 16, startTile: 0, initialDir: [0, 1], initialSpawn: false, eventMinionSpawns: false,
+    bossName: "魔法少女·晕彩", bossMob: "tower_yuncai",
+    victoryDescription: "在轮末任务结算时达成晕彩生命值降至一半及以下的目标",
+    enemyRoster: ["lab_wander", "lab_thunderbird", "lab_cerberus", "tower_luoluo", "tower_xiaobai", "tower_chihen", "tower_variant", "tower_yuncai"],
+    npcRoster: ["npc_taoyao", "npc_manzhushahua", "npc_linglan", "npc_baishuixian"],
+    upgradeCost: (star) => [15, 20, 25][star] ?? null,
+    shopCost: 3, shopOffers: { effect: 2, battle: 1 },
+    chipShopBase: 10, chipShopStep: 5,
+    tiles: [
+      { t: "start", x: 0, y: 0 }, // 0 顶部中央
+      // 刷怪格落格生成游荡魔物；第一轮事件另在三个回血格投放，随机地块事件不刷怪。
+      { t: "draw", x: -1, y: 0 }, { t: "spawn", mob: "lab_wander", x: -2, y: 0 },
+      { t: "draw", x: 1, y: 0 }, { t: "spawn", mob: "lab_wander", x: 2, y: 0 },
+      { t: "shop", x: -2, y: 1 }, { t: "dash", x: 0, y: 1 }, { t: "shop", x: 2, y: 1 },
+      { t: "damage", x: -2, y: 2 }, { t: "event", x: 0, y: 2 }, { t: "damage", x: 2, y: 2 },
+      { t: "assault", x: -2, y: 3 }, { t: "heal", x: 0, y: 3 }, { t: "assault", x: 2, y: 3 },
+      { t: "draw", x: -1, y: 3.5 }, { t: "draw", x: 1, y: 3.5 },
+      { t: "upgrade", x: 0, y: 4 }, // 16 中央四联通枢纽
+      { t: "event", x: -2.5, y: 4 }, { t: "event", x: 2.5, y: 4 },
+      { t: "dash", x: -3, y: 5 }, { t: "dash", x: 0, y: 5 }, { t: "dash", x: 3, y: 5 },
+      { t: "damage", x: -3, y: 6 }, { t: "event", x: 0, y: 6 }, { t: "damage", x: 3, y: 6 },
+      { t: "heal", x: -1, y: 6.5 }, { t: "heal", x: 1, y: 6.5 },
+      { t: "shop", x: -2, y: 6.8 }, { t: "shop", x: 2, y: 6.8 },
+      { t: "spawn", mob: "lab_wander", x: -2, y: 7.8 }, { t: "spawn", mob: "lab_wander", x: 2, y: 7.8 },
+      { t: "draw", x: -1, y: 8.3 }, { t: "draw", x: 1, y: 8.3 },
+      { t: "chipshop", x: 0, y: 8.7 }, // 33 最下方中央
+    ],
+    edges: [
+      [2,1],[1,0],[0,3],[3,4], // 顶边
+      [2,5],[5,8],[8,11], [0,6],[6,9],[9,12],[12,16], [4,7],[7,10],[10,13],
+      [11,14],[14,16],[16,15],[15,13], // 两肩通往中央升星点
+      [11,17],[17,19],[19,22],[22,27], [13,18],[18,21],[21,24],[24,28],
+      [16,20],[20,23], [27,25],[25,23],[23,26],[26,28],
+      [27,29],[29,31],[31,33],[33,32],[32,30],[30,28], // 底部闭环，补齐右侧镜像连接
+    ],
+    globalEvents: [
+      { round: 1, name: "双方对峙", desc: "四名友方魔法少女登场，珞珞、小白与变彩迎战，三个回血格各出现一只游荡魔物。", allowMinionSpawns: true,
+        npcSpawns: [
+          { npc: "npc_taoyao", tile: 2, dir: [0, 1] },
+          { npc: "npc_manzhushahua", tile: 4, dir: [0, 1] },
+          { npc: "npc_linglan", tile: 8, dir: [0, 1] },
+          { npc: "npc_baishuixian", tile: 10, dir: [0, 1] },
+        ],
+        spawns: [{ mob: "tower_luoluo", tiles: [22], dir: [0, -1] }, { mob: "tower_xiaobai", tiles: [24], dir: [0, -1] }, { mob: "tower_variant", tiles: [33] }, { mob: "lab_wander", tiles: "heal" }] },
+      { round: 3, name: "红色风暴", desc: "赤痕登场，所有敌人攻防+1。",
+        spawns: [{ mob: "tower_chihen", tiles: [23], dir: [0, -1] }], effect: "allMonstersStats", atk: 1, def: 1 },
+      { round: 11, name: "魔力强化", desc: "所有敌人攻防+1。", effect: "allMonstersStats", atk: 1, def: 1 },
+    ],
+    specialEvents: {
+      yuncaiArrival: { name: "晕彩降临！", desc: "晕彩登场，所有敌人攻防+1。",
+        spawns: [{ mob: "tower_yuncai", tiles: [23], dir: [0, -1] }], effect: "allMonstersStats", atk: 1, def: 1 },
+    },
+    quests: [
+      { desc: "击倒游荡魔物", targets: ["lab_wander"], need: 4, rewardTier: 1 },
+      { desc: "击倒珞珞或小白", targets: ["tower_luoluo", "tower_xiaobai"], need: 2, rewardTier: 2 },
+      { desc: "击倒赤痕", targets: ["tower_chihen"], need: 1, rewardTier: 3, triggerEvent: "yuncaiArrival" },
+      { desc: "击倒变彩", targets: ["tower_variant"], need: 1, rewardTier: 3 },
+      { desc: "晕彩的生命值降低到一半及以下", targets: ["tower_yuncai"], need: 1, condition: "hpAtMost", hpRatio: 0.5, victory: true },
     ],
   },
 };

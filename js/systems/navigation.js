@@ -50,10 +50,10 @@
       }
       return 9999; // 不可达
     }
-    function nearestMonster(pos) {
+    function nearestMonster(pos, predicate = () => true) {
       const S = getState();
       let best = null, bd = 1e9;
-      S.monsters.forEach(m => { if (m.hp <= 0) return; const d = graphDist(m.pos, pos); if (d < bd) { bd = d; best = m; } });
+      S.monsters.forEach(m => { if (m.hp <= 0 || !predicate(m)) return; const d = graphDist(m.pos, pos); if (d < bd) { bd = d; best = m; } });
       return best;
     }
 

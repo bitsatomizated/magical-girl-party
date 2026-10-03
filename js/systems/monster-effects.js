@@ -170,6 +170,9 @@
         const other = monstersAt(m.pos).find(x => x !== m && x.def.id === m.def.id);
         if (!other) return;
         const fused = makeMonster(D.monsters[p.into[rnd(p.into.length)]], m.pos);
+        // 仅继承魔物重塑的累计强化，避免重复计入地图全局强化与基础属性。
+        fused.reshape = { atk: (m.reshape?.atk || 0) + (other.reshape?.atk || 0), hp: (m.reshape?.hp || 0) + (other.reshape?.hp || 0) };
+        fused.atk += fused.reshape.atk; fused.hpMax += fused.reshape.hp; fused.hp = fused.hpMax;
         fused.fusedRound = S.round; fused.lastFrom = m.lastFrom;
         S.monsters = S.monsters.filter(x => x !== m && x !== other);
         S.monsters.push(fused); rollNextStep(fused, false);

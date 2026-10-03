@@ -31,15 +31,31 @@ window.Engine = (() => {
   const configValidation = window.GameConfigValidation || require("./systems/config-validation.js");
   const playerHandlers = window.GamePlayerEffects || require("./systems/player-effects.js");
   const monsterHandlers = window.GameMonsterEffects || require("./systems/monster-effects.js");
+  const npcHandlers = window.GameNpcEffects || require("./systems/npc-effects.js");
   const effects = effectSystem.create({ getDifficulty: () => D.diff || "normal", difficulties: Object.keys(D.difficulties || {}) });
   playerHandlers.install(effects, { getState, log, graphDist, drawCard, drawBattleCard, grantCard, maxHandSize });
   monsterHandlers.install(effects, { getState, data: D, log, rnd, makeMonster, spawnMonster,
     spawnNear, rollNextStep, monstersAt, playerTakesDamage, checkPlayerKo, effAtk });
+  npcHandlers.install(effects, { getState, data: D, log, rnd, graphDist, spawnMonster, damageFriendly, damageMonsterByNpc, startEntangle });
+  function npcEffects(timing, npc, context = {}) {
+    return effects.emit(timing, [npc.definition.skill, ...(npc.definition.passives || [])], { ...context, npc });
+  }
+  function npcTraits(npc) {
+    return npcEffects("npcTraits", npc, { speedAura: 0, noActiveAttack: false, noCounter: false, preview: true });
+  }
+  function friendlySpeedBonus() {
+    return (S?.npcs || []).filter(n => n.hp > 0).reduce((sum, n) => sum + npcTraits(n).speedAura, 0);
+  }
+  function monsterProtection(monster) {
+    return monsterEffects("monsterProtection", monster, { attack: true, card: true, tile: true, preview: true });
+  }
   function playerEffects(timing, context = {}) {
     return effects.emit(timing, [D.player.passiveSkill], context);
   }
   function monsterEffects(timing, monster, context = {}) {
-    return effects.emit(timing, [monster.def.skill, ...(monster.def.passives || [])], { ...context, monster });
+    const result = effects.emit(timing, [monster.def.skill, ...(monster.def.passives || [])], { ...context, monster });
+    if (timing === "monsterDamaged") checkHealthQuests(monster);
+    return result;
   }
 
   const turnSystem = window.GameTurns || require("./systems/turns.js");
@@ -49,7 +65,7 @@ window.Engine = (() => {
     cancel: id => { if (typeof clearTimeout === "function") clearTimeout(id); },
     rules: {
       startRound: prepareRound, startPlayer: beginPlayerEffects, endPlayer: settlePlayerTurnEnd,
-      judgeQuests, gameOver, moveAlly: allyMove, moveMonster: aiMove, monsterSkill: runMonsterSkill,
+      judgeQuests, gameOver, moveAlly: allyMove, moveNpc: npcMove, moveMonster: aiMove, monsterSkill: runMonsterSkill,
       endMonster: monsterTurnEndEffects,
       stepPlayer, stepAlly, stepMonster, passTile: passThroughTile, landTile: settleLandTile,
     },
@@ -61,7 +77,7 @@ window.Engine = (() => {
   function derived() {
     const P = S.player;
     let atk = P.atk + chipSum("atk") + buffSum("atk"), def = P.def + chipSum("def"); // buff：王之力/狂暴
-    const speed = (P.speedBonus || 0) + (P.turnMoveBonus || 0) + chipSum("speed"); // turnMoveBonus：本回合内的临时移速（青鸾雏焰）
+    const speed = (P.speedBonus || 0) + (P.turnMoveBonus || 0) + (P.turnSpeedBonus || 0) + chipSum("speed") + friendlySpeedBonus() - (P.entangleSlow || 0);
     const pts = 3 + P.star + chipSum("point");
     const lowHp = P.hp <= P.hpMax / 2;
     if (lowHp) atk += chipSum("lowHpAtk"); // 不屈 II
@@ -95,7 +111,7 @@ window.Engine = (() => {
         id: p.id, name: p.name, hp: p.hpMax, hpMax: p.hpMax, atk: p.attack, def: p.defense,
         star: 0, coins: p.initialCoins, pos: m.startTile,
         hand: [], chips: [], wealth: 0, regen: 0,
-        skillCd: 0, atkBuffNextBattle: 0, moveBonus: 0, speedBonus: 0, turnMoveBonus: 0, buffs: [],
+        skillCd: 0, atkBuffNextBattle: 0, moveBonus: 0, speedBonus: 0, turnMoveBonus: 0, nextTurnSpeedBonus: 0, turnSpeedBonus: 0, buffs: [],
         nextDouble: false, nextFixed: 0, nextChooseDir: false,
         flameActive: false,          // 青鸾雏焰：本回合移动铺设青焰（持续到下回合开始的是 S.flames）
         flameBonus: 0,               // 凤凰再生：主动技（青焰）伤害永久加成
@@ -105,8 +121,10 @@ window.Engine = (() => {
       },
       monsters: [], monsterSeq: 0, defCount: {}, // defCount：同名怪编号计数
       allies: [], allySeq: 0, // 友方召唤物（甜品使魔等）；与怪物分列，玩家无法攻击
+      npcs: [], npcSeq: 0,
       allyBonuses: {}, // 按召唤物类型累计永久成长，新生成的同类型单位同样生效
       roundsLimit: m.rounds, // 轮数上限（任务「轮次进度-1」在无法回退时改为延长上限）
+      firedSpecialEvents: {}, pendingSpecialEvents: [],
       firedRounds: {}, // 已结算过轮次开始效果的轮次：轮次进度回退后再次经过该轮时不得重复刷怪/重复加成
       bossRounds: 0, battle: null, chipPurchases: 0, lastChips: [], chipQueue: [], chipRefreshLeft: 2,
       yuncaiRescued: false, // 晕彩救援：每局仅一次（血线触发或被击倒保底触发）
@@ -116,6 +134,7 @@ window.Engine = (() => {
       _dbg: { fpt: 0, aiStart: 0, aiEnd: 0, endRound: 0, startRound: 0 },
     };
     playerEffects("playerInit");
+    (m.initialNpcs || []).forEach(entry => spawnNpc(entry.npc, entry.tile, entry.dir));
     // 起始卡组：随机 2 战斗（不含蓄力/全力）+ 随机 2 效果（设计文档06 §4）
     const bp = D.battlePool.slice(), ep = D.effectPool.slice();
     for (let i = 0; i < 2; i++) S.player.hand.push({ ...D.cards[bp[rnd(bp.length)]] });
@@ -129,7 +148,7 @@ window.Engine = (() => {
     window.Tutorial?.initialize(S, { makeMonster });
     log(S.tutorial && !S.tutorial.graduation
       ? `「${m.name}」：完成上方操作即可进入下一节；本节可随时重试。`
-      : `地图「${m.name}」：共 ${m.rounds} 轮。击败${m.bossName || "最终 BOSS"}即获胜！`);
+      : `地图「${m.name}」：共 ${m.rounds} 轮。${m.victoryDescription || `击败${m.bossName || "最终 BOSS"}`}即获胜！`);
     startRound();
   }
 
@@ -285,6 +304,26 @@ window.Engine = (() => {
     return spots;
   }
 
+  function applyMapEvent(e) {
+    e.spawns?.forEach(sp => {
+      spawnSpotsFor(sp).forEach(i => { const m = spawnMonster(sp.mob, i, sp.dir); log(`　【${m.name}】出现在第 ${i} 格。`, "warn"); });
+    });
+    e.npcSpawns?.forEach(entry => { const npc = spawnNpc(entry.npc, entry.tile, entry.dir); log(`　友方【${npc.name}】在第 ${entry.tile} 格登场。`, "good"); });
+    if (e.effect === "allMonstersStats" || e.effect === "allMonstersPlus1") {
+      const noBoss = e.effect === "allMonstersPlus1"; // 旧地图效果：不含 BOSS
+      const a = e.atk ?? (noBoss ? 1 : 0), d = e.def ?? (noBoss ? 1 : 0);
+      applyGlobalMonsterBonus(a, d, noBoss);
+      log(`　所有敌人攻防 +${a}/+${d}${noBoss ? "（不含 BOSS）" : "（此后出现的敌人同样生效）"}。`, "warn");
+    }
+  }
+  function fireSpecialEvent(id) {
+    if (S.firedSpecialEvents[id]) return;
+    const event = D.map.specialEvents[id];
+    S.firedSpecialEvents[id] = true;
+    log(`⚡【${event.name}】：${event.desc}`, "warn");
+    applyMapEvent(event);
+  }
+
   function fireRoundStartEffects(r) {
     // 每轮只结算一次：轮次进度回退（进度 -1）后再次经过同一轮时，事件不得重复触发
     S.firedRounds = S.firedRounds || {};
@@ -302,15 +341,7 @@ window.Engine = (() => {
     D.map.globalEvents?.forEach(e => {
       if (e.round !== r) return;
       log(`⚡ 第 ${e.round} 轮事件${e.name ? `【${e.name}】` : ""}：${e.desc}`, "warn");
-      e.spawns?.forEach(sp => {
-        spawnSpotsFor(sp).forEach(i => { const m = spawnMonster(sp.mob, i, sp.dir); log(`　【${m.name}】出现在第 ${i} 格。`, "warn"); });
-      });
-      if (e.effect === "allMonstersStats" || e.effect === "allMonstersPlus1") {
-        const noBoss = e.effect === "allMonstersPlus1"; // 旧地图效果：不含 BOSS
-        const a = e.atk ?? (noBoss ? 1 : 0), d = e.def ?? (noBoss ? 1 : 0);
-        applyGlobalMonsterBonus(a, d, noBoss);
-        log(`　所有敌人攻防 +${a}/+${d}${noBoss ? "（不含 BOSS）" : "（此后出现的敌人同样生效）"}。`, "warn");
-      }
+      applyMapEvent(e);
     });
   }
 
@@ -318,6 +349,8 @@ window.Engine = (() => {
   function prepareRound() {
     log(`—— 第 ${S.round} 轮 ——`, "round");
     fireRoundStartEffects(S.round);
+    const pending = S.pendingSpecialEvents.splice(0);
+    pending.forEach(fireSpecialEvent);
     const P = S.player;
     if (P.ko) {
       P.ko = false; P.hp = P.hpMax;
@@ -327,6 +360,9 @@ window.Engine = (() => {
 
   function beginPlayerEffects() {
     turnStartEffects();
+    startEntangle(S.player);
+    if (S.over) return;
+    if (S.player.ko) { finishPlayerTurn(); return; }
     playerEffects("playerTurnStart");
     enterPlayerTurn();
   }
@@ -337,6 +373,9 @@ window.Engine = (() => {
     const P = S.player;
     if (S.flames) { S.flames = null; log(`青焰熄灭了。`); } // 青鸾雏焰：持续到下回合开始
     P.turnMoveBonus = 0; // 本回合临时移速同样只持续到本回合结束
+    P.turnSpeedBonus = P.nextTurnSpeedBonus || 0;
+    P.nextTurnSpeedBonus = 0;
+    if (P.turnSpeedBonus) log(`路过奖励：本回合移动速度 +${P.turnSpeedBonus}。`, "good");
     const hadPixel = P.buffs.some(b => b.pixel);
     if (hadPixel) { P.buffs = P.buffs.filter(b => !b.pixel); log(`【像素化】效果结束。`); }
     const draws = chipSum("draw");
@@ -380,13 +419,42 @@ window.Engine = (() => {
   function buffSum(key) { return S.player.buffs.reduce((s, b) => s + (b[key] || 0), 0); }
 
   // 任务判定：每轮结束时执行一次（设计：非实时结算）
+  function checkHealthQuests(monster) {
+    if (S.over) return;
+    for (const q of S.quests || []) {
+      if (q.done || q.condition !== "hpAtMost") continue;
+      if (!(q.targets || [q.target]).includes(monster.def.id) || monster.hp > monster.hpMax * q.hpRatio) continue;
+      q.progress = q.need; // 只记录进度，胜利统一在轮末任务结算。
+      q.healthTarget = monster; // 保留被一次爆发击倒的目标，结算时仍能完成终场技能。
+    }
+  }
+
   function judgeQuests() {
+    if (S.over) return;
+    for (const q of S.quests || []) {
+      if (q.done || q.condition !== "hpAtMost") continue;
+      const targets = S.monsters.filter(m => (q.targets || [q.target]).includes(m.def.id));
+      // 仍在场时按结算时血量复核；已击倒并移除的目标保留击倒时记录的达成进度。
+      if (targets.length) q.progress = targets.some(m => m.hp <= m.hpMax * q.hpRatio) ? q.need : 0;
+      if (q.progress >= q.need && q.victory) {
+        q.done = true;
+        const target = targets.find(m => m.hp <= m.hpMax * q.hpRatio) || q.healthTarget;
+        if (target) monsterEffects("monsterQuestComplete", target);
+        log(`✅ 任务完成：【${q.desc}】！`, "good");
+        gameOver(true);
+        return;
+      }
+    }
     S.quests?.forEach(q => {
-      if (!q.done && q.progress >= q.need) {
+      if (!q.done && q.condition !== "hpAtMost" && q.progress >= q.need) {
         q.done = true;
         log(`✅ 任务完成：【${q.desc}】！奖励：${q.rewardTier} 级概率筹码 3 选 1。`, "good");
         if (q.extra === "roundProgressMinus1") rewindRoundProgress(1);
         requestChipChoice(q.rewardTier); // 入队，不阻塞轮次推进
+        if (q.triggerEvent && !S.firedSpecialEvents[q.triggerEvent] && !S.pendingSpecialEvents.includes(q.triggerEvent)) {
+          S.pendingSpecialEvents.push(q.triggerEvent);
+          log(`【${D.map.specialEvents[q.triggerEvent].name}】将在下回合开始时触发。`, "warn");
+        }
       }
     });
   }
@@ -446,7 +514,7 @@ window.Engine = (() => {
     if (!c) return false;
     const P = S.player;
     if (c.kind === "damage") {
-      const targets = S.monsters.filter(m => m.hp > 0 && graphDist(m.pos, P.pos) <= c.range);
+      const targets = S.monsters.filter(m => m.hp > 0 && monsterProtection(m).card && graphDist(m.pos, P.pos) <= c.range);
       if (!targets.length) { log(`【${c.name}】：射程 ${c.range} 格内没有怪物，无法使用。`, "warn"); return false; }
       // 进入瞄准模式：牌保留在手，选目标后结算
       S.targeting = { cardIdx: idx, candidates: targets.map(t => t.uid), cardName: c.name };
@@ -490,7 +558,7 @@ window.Engine = (() => {
     const idx = S.targeting.cardIdx;
     const c = S.player.hand[idx];
     const t = S.monsters.find(m => m.uid === uid);
-    if (c && (!t || t.hp <= 0 || graphDist(t.pos, S.player.pos) > c.range)) {
+    if (c && (!t || t.hp <= 0 || !monsterProtection(t).card || graphDist(t.pos, S.player.pos) > c.range)) {
       log("目标已失效，请重新选择。", "warn");
       return;
     }
@@ -511,9 +579,10 @@ window.Engine = (() => {
   function doAssault(uid) {
     const m = S.monsters.find(x => x.uid === uid);
     S.targeting = null;
-    if (!m || m.hp <= 0) { window.UI.renderAll(); return; }
+    if (!m || m.hp <= 0 || !monsterProtection(m).attack) { window.UI.renderAll(); return; }
     S.player.pos = m.pos;
     playerEffects("playerEnterTile", { pos: m.pos, movement: "assault" });
+    releaseEntangleOnPass(S.player);
     S.player.lastFrom = null; // 突袭落地：无来路，按初始方向起步
     if (S.player.flameActive) layFlame(S.player.pos); // 突袭落地格同样视为本次移动的终点
     if (S.move) S.move.steps = 0; // 突击即落地：剩余步数作废
@@ -552,7 +621,7 @@ window.Engine = (() => {
     let steps;
     const trainingSteps = window.Tutorial?.moveSteps(S);
     if (trainingSteps != null) { steps = trainingSteps; log(`教学路线：本次固定移动 ${steps} 格（正式对局按骰子与移速结算）。`); }
-    else if (P.nextFixed > 0) { steps = P.nextFixed; P.nextFixed = 0; log(`遥控骰子：固定 ${steps} 点，开始移动。`); }
+    else if (P.nextFixed > 0) { steps = P.nextFixed + (P.turnSpeedBonus || 0) + friendlySpeedBonus() - (P.entangleSlow || 0); P.nextFixed = 0; log(`遥控骰子：本次移动 ${Math.max(0, steps)} 格。`); }
     else {
       let r = die(faces);
       if (P.nextDouble) { r += die(faces); P.nextDouble = false; log("【加急加快】双骰！"); }
@@ -560,6 +629,7 @@ window.Engine = (() => {
       log(`掷骰：${steps} 点，开始移动。`);
     }
     P.moveBonus = 0;
+    steps = Math.max(0, steps);
     if (P.flameActive) layFlame(P.pos); // 青焰含移动起点
     // 普通起步继承来路；方向抉择仅在本次首步允许选择全部邻格（含来路）。
     S.move = { who: "player", steps, prev: P.lastFrom ?? null, forcedNext: null, chooseDir: P.nextChooseDir };
@@ -617,6 +687,7 @@ window.Engine = (() => {
       playerEffects("playerEnterTile", { pos: next, movement: "walk" });
       if (S.player.flameActive) layFlame(next); // 青焰含途经与终点格
       healPassAllies(next); // 治愈魔法：路过甜品使魔所在格即触发
+      releaseEntangleOnPass(S.player);
       window.UI.renderAll(); // 步进可视化
       if (ANIM) await delay(ANIM);
       if (!active() || S.move !== mv) return;
@@ -738,7 +809,7 @@ window.Engine = (() => {
     if (S.over || P.ko) return false;
     const asked = mv ? (mv.asked = mv.asked || {}) : {};
     for (;;) {
-      const m = monstersAt(P.pos).filter(x => x.hp > 0).find(x => !asked[x.uid]);
+      const m = monstersAt(P.pos).filter(x => x.hp > 0 && monsterProtection(x).attack).find(x => !asked[x.uid]);
       if (!m) return false; // 该地块上的怪物都询问过了
       asked[m.uid] = true;
       const detail = `HP ${m.hp}/${m.hpMax}　攻 ${m.atk}　防 ${m.def_}`;
@@ -819,7 +890,7 @@ window.Engine = (() => {
         const roll = d10(), spd = derived().speed;
         if (spd > 0) log(`疾行：再掷 ${roll} 点，移速 +${spd}，共 ${roll + spd} 点！`);
         else log(`疾行：再掷 ${roll} 点！`);
-        return roll + spd;
+        return Math.max(0, roll + spd);
       }
       case "event": randomEvent(); break;
       case "spawn": {
@@ -833,7 +904,7 @@ window.Engine = (() => {
         break;
       }
       case "assault": {
-        const alive = S.monsters.filter(m => m.hp > 0);
+        const alive = S.monsters.filter(m => m.hp > 0 && monsterProtection(m).attack);
         if (alive.length) {
           // 突击门：自选任意怪物，突袭至其所在格后开战
           S.targeting = { assault: true, candidates: alive.map(m => m.uid), cardName: "突击门" };
@@ -880,7 +951,9 @@ window.Engine = (() => {
   // 事件扣血不走 playerTakesDamage：事件不是战斗伤害，不受战斗芯片（不屈/狂暴/缓冲）影响
   function randomEvent() {
     const P = S.player;
-    const r = rnd(8);
+    // 禁止事件投放小怪的地图，从其余七种事件中等概率抽取。
+    const pool = D.map.eventMinionSpawns === false ? [0, 1, 2, 3, 5, 6, 7] : [0, 1, 2, 3, 4, 5, 6, 7];
+    const r = pool[rnd(pool.length)];
     if (r === 0) { P.coins += 5; log("事件：捡到 5 金币！", "good"); }
     else if (r === 1) { P.coins = Math.max(0, P.coins - 3); log("事件：丢失 3 金币…", "warn"); }
     else if (r === 2) { P.moveBonus += 3; log("事件：下次移动速度 +3。", "good"); }
@@ -905,6 +978,7 @@ window.Engine = (() => {
 
   // 事件刷怪：全图随机挑 n 个互不相同的地块，每格刷 1 只随机小怪（不排除任何地块类型）
   function eventSpawnMinions(n) {
+    if (D.map.eventMinionSpawns === false) return;
     const pool = mapMinionPool();
     const total = D.map.tiles.length;
     const picked = [];
@@ -921,6 +995,7 @@ window.Engine = (() => {
   // ================= 战斗（设计文档02）=================
   function startBattle(by, target) {
     if (by === "player") {
+      if (!monsterProtection(target).attack) return;
       S.battle = { mode: "playerAttack", target, cardBonus: 0, defBonus: 0, finalMult: 1, spentPoints: 0, noCounter: false };
       log(`⚔ 玩家对【${target.name}】发起战斗！`, "battle");
       S.phase = "battle";
@@ -1124,10 +1199,71 @@ window.Engine = (() => {
     // 任务计数（实时累计，完成判定在每轮结束时统一进行）
     S.quests?.forEach(q => {
       const hit = q.targets ? q.targets.includes(t.def.id) : q.target === t.def.id;
-      if (!q.done && hit) q.progress++;
+      if (!q.done && hit && q.condition !== "hpAtMost") {
+        q.progress++;
+      }
     });
     S.monsters = S.monsters.filter(m => m !== t);
-    if (t.def.category === "boss") gameOver(true);
+    checkHealthQuests(t);
+    if (t.def.category === "boss" && !D.map.quests?.some(q => q.victory)) gameOver(true);
+  }
+
+  // ================= 友方 NPC 与缠绕 =================
+  function spawnNpc(id, pos, dir) {
+    const def = D.npcs[id];
+    const npc = { uid: ++S.npcSeq, isNpc: true, definition: def, name: def.name, pos,
+      hp: def.hpMax, hpMax: def.hpMax, atk: def.attack, def: def.defense,
+      skillCd: 0, entangle: 0, entangleSlow: 0, nextMoveBonus: 0, lastFrom: null, firstStep: null, queuedNext: null };
+    if (dir) npc.firstStep = dirNeighbor(pos, dir);
+    S.npcs.push(npc); rollAllyNext(npc);
+    return npc;
+  }
+  function damageFriendly(unit, damage, source, attacker = null) {
+    if (unit.hp <= 0 || unit.ko) return 0;
+    if (unit === S.player) {
+      const dealt = playerTakesDamage(damage, source, attacker);
+      checkPlayerKo(); return dealt;
+    }
+    unit.hp = Math.max(0, unit.hp - damage);
+    log(`【${source}】：${unit.name}受到 ${damage} 点伤害（剩 ${unit.hp}）。`, "warn");
+    if (unit.hp <= 0) {
+      if (unit.isNpc) S.npcs = S.npcs.filter(n => n !== unit);
+      else S.allies = S.allies.filter(a => a !== unit);
+      log(`【${unit.name}】退场。`, "warn");
+    }
+    return damage;
+  }
+  function startEntangle(unit) {
+    unit.entangleSlow = unit.entangle || 0; // 本回合减速按回合开始时层数锁定。
+    if (unit.entangleSlow) damageFriendly(unit, unit.entangleSlow, "缠绕");
+  }
+  function releaseEntangleOnPass(unit) {
+    const friendlies = [S.player, ...S.npcs, ...S.allies];
+    if (unit.hp <= 0 || unit.ko || !friendlies.includes(unit)) return;
+    const peers = friendlies.filter(n => n !== unit && n.hp > 0 && !n.ko && n.pos === unit.pos);
+    for (const peer of peers) {
+      if (!unit.entangle && !peer.entangle) continue;
+      unit.entangle = Math.max(0, (unit.entangle || 0) - 1);
+      peer.entangle = Math.max(0, (peer.entangle || 0) - 1);
+      log(`【缠绕解除】：${unit.name}与${peer.name}相遇，各移除1层缠绕。`, "good");
+    }
+  }
+  function npcMove(npc, done) {
+    startEntangle(npc);
+    if (S.over || npc.hp <= 0) { done(); return; }
+    if (npc.skillCd > 0) npc.skillCd--;
+    effects.emit("npcTurnStart", [npc.skillCd <= 0 ? npc.definition.skill : null, ...(npc.definition.passives || [])], { npc });
+    if (S.over || npc.hp <= 0) { done(); return; }
+    allyMove(npc, done);
+  }
+  function damageMonsterByNpc(npc, target, raw) {
+    if (target.hp <= 0) return 0;
+    const damage = markedDamage(target, raw);
+    target.hp -= damage;
+    if (target.hp <= 0) defeatMonsterByAlly(target);
+    monsterEffects("monsterDamaged", target, { source: "npc" });
+    npcEffects("npcHit", npc, { target, damage });
+    return damage;
   }
 
   // ================= 友方召唤物：甜品使魔（洛可可）=================
@@ -1155,7 +1291,7 @@ window.Engine = (() => {
     if (a.firstStep != null && S.adj[a.pos].includes(a.firstStep)) {
       pool = [a.firstStep];
     } else {
-      const target = nearestMonster(a.pos);
+      const target = nearestMonster(a.pos, m => monsterProtection(m).attack);
       const opts = a.lastFrom != null ? stepOptions(a.pos, a.lastFrom) : S.adj[a.pos].slice();
       if (target) {
         let bd = 1e9;
@@ -1222,6 +1358,7 @@ window.Engine = (() => {
   // 使魔攻击一只怪物：双方各掷 d6，计入目标已有标记；不触发玩家筹码（不走 onHitEnemy）。
   // 防御读 effDef，伤害共用标记/减伤；晕彩救援的触发面与 dealToMonster 一致（低血或击倒）
   function allyStrike(a, m) {
+    if (a.hp <= 0 || m.hp <= 0 || !monsterProtection(m).attack) return;
     const aRoll = d6(), mRoll = d6();
     const dmg = markedDamage(m, a.atk + aRoll - (effDef(m) + mRoll));
     log(`【${a.name}】攻击【${m.name}】：${a.atk}+${aRoll} vs ${effDef(m)}+${mRoll}，造成 ${dmg} 点伤害${m.hp - dmg <= 0 ? "，将其击倒！" : `（剩 ${Math.max(0, m.hp - dmg)}）`}`, "good");
@@ -1230,42 +1367,36 @@ window.Engine = (() => {
     if (m.hp <= 0) defeatMonsterByAlly(m);
     // 晕彩救援：使魔伤害同样要给安若素留保底（否则她被使魔击杀后首领永远不会登场）
     monsterEffects("monsterDamaged", m, { source: "ally" });
-    if (m.hp <= 0) return;
+    if (a.isNpc) npcEffects("npcHit", a, { target: m, damage: dmg });
+    if (m.hp <= 0 || S.over) return;
     // 怪物还手：与玩家攻击同一规则，仅带 counter 标签的怪物会反击
-    if (m.def.tags.includes("counter")) {
+    if (m.def.tags.includes("counter") && !(a.isNpc && npcTraits(a).noCounter)) {
       const cRoll = d6(), fRoll = d6();
       const cdmg = Math.max(1, effAtk(m) + cRoll - (a.def + fRoll));
-      a.hp -= cdmg;
-      log(`【${m.name}】还手：【${a.name}】受到 ${cdmg} 点伤害（剩 ${Math.max(0, a.hp)}）。`, "warn");
-      if (a.hp <= 0) {
-        S.allies = S.allies.filter(x => x !== a);
-        log(`【${a.name}】被击碎了……`, "warn");
-      }
+      damageFriendly(a, cdmg, `${m.name}的反击`, m);
     }
   }
 
   // 敌人路过甜品使魔所在格：主动攻击的敌人会攻击它（自动结算，无需玩家选姿态）
   function monsterStrikeAlly(m, a) {
+    if (a.hp <= 0 || (a.isNpc && npcTraits(a).noActiveAttack)) return;
     const mRoll = d6(), aRoll = d6();
     const dmg = Math.max(1, effAtk(m) + mRoll - (a.def + aRoll));
     consumeMonsterBattleBonus(m);
-    a.hp -= dmg;
-    log(`⚔【${m.name}】攻击【${a.name}】：造成 ${dmg} 点伤害（剩 ${Math.max(0, a.hp)}）。`, "battle");
-    if (a.hp <= 0) {
-      S.allies = S.allies.filter(x => x !== a);
-      log(`【${a.name}】被击碎了……`, "warn");
-    }
+    damageFriendly(a, dmg, m.name, m);
   }
 
   // 友方行动规则；名单与行动顺序由 turns 调度。
   function allyMove(a, done) {
+    if (!a.isNpc) startEntangle(a); // NPC已在技能发动前结算；召唤物在自身行动开始结算。
+    if (S.over || a.hp <= 0) { done(); return; }
     let roll = 0;
     for (let i = 0; i < a.definition.move.dice; i++) roll += die(a.definition.move.faces);
-    const bonus = a.nextMoveBonus || 0;
-    if (bonus) log(`【${a.name}】移速提升 +${bonus}。`, "good");
+    const bonus = (a.nextMoveBonus || 0) + friendlySpeedBonus() - (a.entangleSlow || 0);
+    if (bonus) log(`【${a.name}】本回合移速 ${bonus > 0 ? "+" : ""}${bonus}。`, bonus > 0 ? "good" : "warn");
     a.nextMoveBonus = 0;
-    log(`【${a.name}】掷骰 ${roll}${bonus ? "（+" + bonus + " 移速）" : ""} 点，开始追击。`);
-    S.move = { who: a, isAlly: true, steps: roll + bonus, done, prev: null };
+    log(`【${a.name}】掷骰 ${roll} 点，本次移动 ${Math.max(0, roll + bonus)} 格。`);
+    S.move = { who: a, isAlly: true, steps: Math.max(0, roll + bonus), done, prev: null };
     window.UI.renderAll();
     stepAlly();
   }
@@ -1288,6 +1419,7 @@ window.Engine = (() => {
       mv.steps--;
       a.lastFrom = a.pos; // 记录来路：下步不掉头（无怪可追时沿路继续）
       a.pos = next;
+      releaseEntangleOnPass(a);
       if (a.firstStep === next) a.firstStep = null; // 初始方向仅约束首步
       rollAllyNext(a); // 落地即预掷下一步：预告箭头任何时刻都有解
       window.UI.renderAll();
@@ -1295,7 +1427,7 @@ window.Engine = (() => {
       if (!active() || S.move !== mv) return;
       if (S.over || a.hp <= 0) break;
       // 攻击所有自己路过的怪物（含同格多只）
-      const foes = monstersAt(a.pos).filter(x => x.hp > 0);
+      const foes = monstersAt(a.pos).filter(x => x.hp > 0 && monsterProtection(x).attack);
       for (const foe of foes) {
         allyStrike(a, foe);
         if (a.hp <= 0 || S.over) break;
@@ -1367,7 +1499,7 @@ window.Engine = (() => {
       P.hp = 0; P.ko = true;
       P.buffs = [];
       P.flameActive = false;
-      P.atkBuffNextBattle = 0; P.moveBonus = 0; P.turnMoveBonus = 0; P.nextDouble = false; P.nextFixed = 0; P.nextChooseDir = false;
+      P.atkBuffNextBattle = 0; P.moveBonus = 0; P.turnMoveBonus = 0; P.turnSpeedBonus = 0; P.nextDouble = false; P.nextFixed = 0; P.nextChooseDir = false;
       log("玩家被击倒！所有 buff 清空，跳过后续行动，下回合开始时原地复活。", "warn");
       advanceRoundProgress(1); // 轮次进度 +1（设计文档02 §6）：倒地瞬间即时结算，被跨过的那一轮事件照常触发
     }
@@ -1391,9 +1523,9 @@ window.Engine = (() => {
   }
 
   function aiMove(m, done) {
-    if (S.player.ko) { done(); return; }
+    if (S.player.ko && ![...S.npcs, ...S.allies].some(n => n.hp > 0)) { done(); return; }
     runMonsterSkill(m);
-    if (S.player.ko) { done(); return; }
+    if (S.over || (S.player.ko && ![...S.npcs, ...S.allies].some(n => n.hp > 0))) { done(); return; }
     const roll = d10();
     const bonus = (m.def.move.steps || 1) - 1 + (m.moveBonusNext || 0);
     if (m.moveBonusNext) log(`【${m.name}】移速提升 +${m.moveBonusNext}。`);
@@ -1484,22 +1616,23 @@ window.Engine = (() => {
       if (!active() || S.move !== mv) return;
       if (S.over || S.battle) break;
       // 青焰：进入青焰地块的敌人受到伤害（起步所在格不结算，与「经过」语义一致）
-      if (S.flames && S.flames[m.pos]) {
+      if (S.flames && S.flames[m.pos] && monsterProtection(m).tile) {
         const dmg = S.flames[m.pos];
         log(`【${m.name}】踏入青焰，受到 ${dmg} 点伤害！`, "good");
         dealToMonster(m, dmg);
         if (m.hp <= 0) break; // 被青焰击倒：本次移动结束（defeatMonster 已结算）
         if (S.over) break;
       }
+      if (m.pos === P.pos && !P.ko) playerEffects("monsterEnterPlayer", { monster: m });
       // 敌人路过甜品使魔：主动攻击的敌人会攻击它（每名敌人每回合只发动一次攻击，
       // 先经过使魔再经过玩家时只攻击使魔）
       if (!mv.attacked && m.def.tags.includes("aggressive")) {
-        const ally = (S.allies || []).find(x => x.hp > 0 && x.pos === m.pos);
+        const ally = [...S.allies, ...S.npcs].find(x => x.hp > 0 && x.pos === m.pos && !(x.isNpc && npcTraits(x).noActiveAttack));
         if (ally) { mv.attacked = true; monsterStrikeAlly(m, ally); }
       }
-      if (m.pos === P.pos && !mv.attacked) {
+      if (m.pos === P.pos && !P.ko && !mv.attacked) {
         mv.attacked = true;
-        // 喵之追猎：怪物路过玩家所在格 → 施加 1 层追猎
+        // 接触交战时机；路过被动已在 monsterEnterPlayer 独立结算。
         playerEffects("monsterPassPlayer", { monster: m });
         if (m.def.tags.includes("aggressive") && S.player.buffs.some(b => b.pixel)) {
           log(`【像素化】：【${m.name}】无法主动攻击你，继续移动。`);
@@ -1532,7 +1665,8 @@ window.Engine = (() => {
     S.shop = null; S.targeting = null; S.targetingResume = false;
     S.battle = null; S.pendingTile = null; S.move = null;
     const bossName = D.map.bossName || "最终 BOSS";
-    log(win ? `★ ${bossName}被击败！胜利！` : `轮数耗尽，未能击败${bossName}……失败。`, win ? "good" : "warn");
+    const objective = D.map.victoryDescription;
+    log(win ? (objective ? `★ 已达成：${objective}！胜利！` : `★ ${bossName}被击败！胜利！`) : (objective ? `轮数耗尽，未能${objective}……失败。` : `轮数耗尽，未能击败${bossName}……失败。`), win ? "good" : "warn");
     if (win && !S.tutorial) recordWin();
     window.UI.renderAll();
   }
@@ -1607,8 +1741,10 @@ window.Engine = (() => {
     buyShop, closeShop, pickChip, chipShopPrice, chooseTarget, cancelTargeting, refreshChips,
     chooseDeployTile,
     derived, effectCardDamage, cardDescription, maxHandSize, skillCooldown, monsterDamageReduction, monsterDamagePreview,
+    monsterProtection, npcTraits, friendlySpeedBonus,
     // 无头测试与规则模拟的显式接口；测试不再改写引擎源码注入导出。
     _test: {
+      spawnNpc, npcMove, npcEffects, allyMove, startEntangle, releaseEntangleOnPass, damageFriendly, damageMonsterByNpc,
       ask, aiMove, aiTurns, checkPlayerKo, advanceRoundProgress, rewindRoundProgress,
       endRound, startRound, finishPlayerTurn, mapMinionPool, eventSpawnMinions,
       settleLandTile, randomEvent, startBattle, monsterAttack, passByEffects, offerTileFight, stopPrompt,

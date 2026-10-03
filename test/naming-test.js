@@ -56,7 +56,7 @@ function setup(diff) {
   check(`分身编号为 ${names(S5, "maid_yuncai_clone").join("、")}`,
     JSON.stringify(names(S5, "maid_yuncai_clone")) === JSON.stringify(["晕彩分身1", "晕彩分身2"]));
   const an5 = S5.monsters.find(m => m.def.id === "maid_anruosu");
-  X.dealToMonster(an5, 11); // 触发晕彩救援
+  X.dealToMonster(an5, an5.hpMax - Math.floor(an5.hpMax * 0.3) + 1); // 触发晕彩救援
   const yc5 = S5.monsters.find(m => m.def.id === "maid_yuncai");
   check(`BOSS 晕彩不编号（${yc5 && yc5.name}）`, !!yc5 && yc5.name === "女仆晕彩");
 
@@ -91,7 +91,7 @@ function setup(diff) {
   // 女仆晕彩：无 growth，在场时推进轮次不应报错、也不应被成长逻辑改动数值
   const S7 = setup();
   const an7 = S7.monsters.find(m => m.def.id === "maid_anruosu");
-  X.dealToMonster(an7, 11); // 触发晕彩救援，使 BOSS 登场
+  X.dealToMonster(an7, an7.hpMax - Math.floor(an7.hpMax * 0.3) + 1); // 触发晕彩救援，使 BOSS 登场
   const yc = S7.monsters.find(m => m.def.id === "maid_yuncai");
   const snap = { atk: yc.atk, def_: yc.def_, hpMax: yc.hpMax, name: yc.name };
   let crashed = null;

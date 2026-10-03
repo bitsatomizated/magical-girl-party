@@ -32,9 +32,9 @@ async function card(id,target) {
   }
   {
     const {P,boss}=start();P.chips=["guidance","amplify"];
-    await card("arcaneLaser",boss);assert.equal(boss.hp,98,"增幅后的 4 伤减至 2");assert.equal(boss.marks,1);
-    assert.equal(E.effectCardDamage(D.cards.arcaneLaser),5,"减伤不阻止激光成长");
-    await card("arcaneLaser",boss);assert.equal(boss.hp,94,"下一张先用旧标记增伤，再减伤");assert.equal(boss.marks,2);
+    await card("arcaneLaser",boss);assert.equal(boss.hp,99,"增幅后的 3 伤减至 1");assert.equal(boss.marks,1);
+    assert.equal(E.effectCardDamage(D.cards.arcaneLaser),4,"减伤不阻止激光成长");
+    await card("arcaneLaser",boss);assert.equal(boss.hp,96,"下一张先用旧标记增伤，再减伤");assert.equal(boss.marks,2);
     w.UI.renderAll();assert.match(w.document.getElementById("info").textContent,/当前减伤 2/);
     X.startBattle("player",boss);assert.match(w.document.getElementById("battle-info").textContent,/减伤 2/);
   }

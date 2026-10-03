@@ -72,7 +72,7 @@ async function play(id, target) {
   {
     const { P } = start("char_xingmeng"); P.chips = ["amplify", "guidance"];
     const m = monster(1);
-    for (const [damage,next] of [[4,5],[6,6],[8,7]]) {
+    for (const [damage,next] of [[3,4],[5,5],[7,6]]) {
       const hp=m.hp; await play("arcaneLaser",m);
       assert.equal(hp-m.hp,damage); assert.equal(E.effectCardDamage(D.cards.arcaneLaser),next);
     }

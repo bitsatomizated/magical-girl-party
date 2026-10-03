@@ -83,11 +83,17 @@ window.UI = (() => {
       if (!b.atk && !b.def) return "";
       return `<div class="ev-row now">当前全局强化：所有敌人 攻 +${b.atk} 防 +${b.def}（含此后刷出的敌人）</div>`;
     })() : "";
+    Object.entries(D.map.specialEvents || {}).forEach(([id, e]) => {
+      const fired = !!S.firedSpecialEvents?.[id];
+      const trigger = (D.map.quests || []).find(q => q.triggerEvent === id);
+      evEl.innerHTML += `<div class="ev-row${fired ? " past" : ""}">特殊事件【${e.name}】：${e.desc}（${fired ? "已触发" : S.pendingSpecialEvents?.includes(id) ? "下回合开始触发" : trigger ? `${trigger.desc}任务结算后的下回合开始触发` : "等待触发"}）</div>`;
+      evEl.classList.remove("hidden");
+    });
     const qs = S.quests || [];
     qEl.classList.toggle("hidden", !qs.length);
     qEl.innerHTML = qs.length ? `<div class="mp-head">📋 地图任务</div>` + qs.map(q =>
       `<div class="q-row${q.done ? " done" : ""}">【${q.desc}】<b>${q.progress}/${q.need}</b>${q.done ? "｜<span class='good'>已完成</span>" : ""}` +
-      `<br><span class="q-reward">奖励：${q.rewardTier} 级概率筹码${q.extra === "roundProgressMinus1" ? "，轮次进度 -1" : ""}</span></div>`
+      `<br><span class="q-reward">奖励：${q.victory ? "本局游戏胜利" : `${q.rewardTier} 级概率筹码`}${q.extra === "roundProgressMinus1" ? "，轮次进度 -1" : ""}${q.triggerEvent ? `，触发【${D.map.specialEvents[q.triggerEvent].name}】` : ""}</span></div>`
     ).join("") : "";
   }
 
@@ -169,6 +175,8 @@ window.UI = (() => {
       `财富层数 ${S.player.wealth}｜再生层数 ${S.player.regen}` +
       ((() => { const per = (S.player.chips || []).reduce((n, id) => n + (D.chips[id]?.regenStacks || 0), 0); return per ? `（每回合开始时 +${per}）` : ""; })()) +
       `<br>手牌 ${S.player.hand.length}/${Engine.maxHandSize()}` +
+      ((S.player.entangle || S.player.entangleSlow) ? `<br>缠绕 ${S.player.entangle || 0} 层｜本回合缠绕减速 ${S.player.entangleSlow || 0}` : "") +
+      (Engine.friendlySpeedBonus() ? `<br>队友链接：全体友方移速 +${Engine.friendlySpeedBonus()}` : "") +
       `<br>主动【${P.activeSkill.name}】（CD${Engine.skillCooldown()}）：${P.activeSkill.desc} ${cd > 0 ? `｜冷却中：${cd} 轮` : "｜<span class='good'>就绪</span>"}` +
       `<br>被动【${P.passiveSkill.name}】：${P.passiveSkill.desc}` +
       Object.keys(S.player.cardDamageBonuses || {}).map(id =>
@@ -192,6 +200,14 @@ window.UI = (() => {
         (a.nextMoveBonus ? `｜下次移动速度 +${a.nextMoveBonus}` : "")
       ).join("<br>") + `</div>`;
     }
+    const npcs = S.npcs || [];
+    if (npcs.length) {
+      html += `<div class="info-sec"><b>友方 NPC</b>（召唤物后、敌方前行动）<br>` + npcs.map(n =>
+        `<div class="info-npc">◆ <b>${n.name}</b> HP ${n.hp}/${n.hpMax} 攻 ${n.atk} 防 ${n.def}｜缠绕 ${n.entangle || 0} 层｜本回合减速 ${n.entangleSlow || 0}` +
+        (n.definition.skill ? `<br>主动【${n.definition.skill.name}】${n.definition.skill.desc}｜剩余CD ${n.skillCd}` : "") +
+        (n.definition.passives || []).map(p => `<br>被动【${p.name}】${p.desc}`).join("") + `</div>`
+      ).join("<br>") + `</div>`;
+    }
     html += `<div class="info-sec"><b>怪物图鉴</b><br><span class="info-hint">棋盘上怪物条目：名字 生命 攻/防 + 状态（▮=标记 追=追猎 CD=技能冷却）</span>`;
     const candIds = (S.targeting && !S.targeting.deploy && !S.targeting.deployDir) ? S.targeting.candidates : null;
     const GD = window.GAME_DATA;
@@ -207,10 +223,11 @@ window.UI = (() => {
       const ps = (d.passives || []).filter(p => !p.minDiff || curRank >= RANK[p.minDiff]);
       const psLine = ps.map(p =>
         `<br><span class="mob-passive">被动【${p.name || p.effect || "未知"}】</span>${p.desc || ""}`).join("");
-      const tags = d.tags.map(t => TAG_CN[t] || t).join("、") || "—";
+      const tags = d.tags.filter(t => t !== "counter").map(t => TAG_CN[t] || t).join("、") || "—";
       const mv = d.move || {};
       const moveBonus = (mv.steps || 1) - 1;
-      const moveTxt = mv.stationary ? "驻守不动" : `每回合 1d10${moveBonus ? ` + ${moveBonus}` : ""} 格${d.tags.includes("aggressive") ? "，朝你逼近" : "，不主动靠近"}`;
+      const moveTxt = mv.stationary ? "驻守不动" :
+        `${d.tags.includes("aggressive") ? "主动靠近玩家" : "不主动靠近玩家"}${moveBonus ? `，移动速度${moveBonus > 0 ? "+" : ""}${moveBonus}` : ""}`;
       // 守方倾向：不配置就是默认防御，写了等于没写；只有会进入闪避姿态的怪才标出来
       const dv = d.defend;
       const dvStances = !dv ? [] : dv.rule === "always" ? [dv.stance]
@@ -219,7 +236,7 @@ window.UI = (() => {
         ? `｜守方倾向：${dv.rule === "always" ? STANCE_CN[dv.stance]
           : `按血量切换（高于 ${Math.round(dv.threshold * 100)}% 时 ${STANCE_CN[dv.above]}，否则 ${STANCE_CN[dv.belowOrEqual]}）`}`
         : "";
-      return skLine + psLine + `<br>行为：${tags}｜移速：${moveTxt}${dvTxt}｜反击：${d.tags.includes("counter") ? "会反击" : "不会反击"}`;
+      return skLine + psLine + `<br>行为：${tags}｜移动：${moveTxt}${dvTxt}｜反击：${d.tags.includes("counter") ? "会" : "不会"}`;
     };
     if (candIds) {
       // —— 瞄准模式：逐个体列出，编号与棋盘标记一致 ——
@@ -329,6 +346,10 @@ window.UI = (() => {
         svg += `<text x="${p.x}" y="${ty}" class="token-ally" text-anchor="middle">🍰${a.name} ${a.hp}/${a.hpMax}</text>`;
         ty += 13;
       });
+      (S.npcs || []).filter(a => a.pos === i && a.hp > 0).forEach(a => {
+        svg += `<text x="${p.x}" y="${ty}" class="token-ally token-npc" text-anchor="middle">◆${a.name.replace("魔法少女·", "")} ${a.hp}/${a.hpMax}${a.entangle ? ` 缠${a.entangle}` : ""}${a.skillCd ? ` CD${a.skillCd}` : ""}</text>`;
+        ty += 13;
+      });
       if (awaitSet && awaitSet.includes(i)) { // 岔路待选项：可点击高亮
         svg += `<g class="move-choice" data-pos="${i}" style="cursor:pointer">` +
           `<circle cx="${p.x}" cy="${p.y}" r="40" class="move-ring"/>` +
@@ -372,7 +393,7 @@ window.UI = (() => {
         svg += arrow(m.pos, n, 0.66, cls, (mi++ % 3) * 7);
       });
       // 友方（甜品使魔）方向预告：绿色箭头，与 stepAlly 的实际走向同一套规则
-      (S.allies || []).forEach(a => {
+      [...(S.allies || []), ...(S.npcs || [])].forEach(a => {
         if (a.hp <= 0) return;
         const n = Engine.peekAllyNext(a);
         if (n == null) return;

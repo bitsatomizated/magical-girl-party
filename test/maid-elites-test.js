@@ -205,9 +205,11 @@ function setup(diff, mapName) {
   // ---- [7] 平衡数值表（四档难度）----
   console.log("[7] 平衡数值表：晕彩 -3 攻 / -2 防，血量 77/99/122/144；缇娜、苏桃夭 -1 攻");
   const numTable = {
+    maid_anruosu: { normal: [18, 3, 2], hard: [22, 3, 2], nightmare: [24, 4, 2], crazy: [28, 5, 2] },
+    maid_yuncai_clone: { normal: [14, 4, 2], hard: [16, 4, 2], nightmare: [16, 4, 2], crazy: [18, 4, 2] },
     maid_yuncai:   { normal: [77, 4, 2],  hard: [99, 4, 2],  nightmare: [122, 5, 2], crazy: [144, 6, 2] },
-    maid_tina:     { normal: [22, 4, 2],  hard: [26, 4, 2],  nightmare: [28, 5, 2],  crazy: [36, 6, 2] },
-    maid_sutaoyao: { normal: [18, 3, 3],  hard: [22, 3, 3],  nightmare: [24, 4, 3],  crazy: [30, 5, 3] },
+    maid_tina:     { normal: [26, 4, 2],  hard: [30, 4, 2],  nightmare: [32, 5, 2],  crazy: [40, 6, 2] },
+    maid_sutaoyao: { normal: [22, 3, 3],  hard: [26, 3, 3],  nightmare: [28, 4, 3],  crazy: [34, 5, 3] },
   };
   for (const [id, tbl] of Object.entries(numTable)) {
     for (const [diff, [hp, atk, def]] of Object.entries(tbl)) {

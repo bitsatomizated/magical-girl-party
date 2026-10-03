@@ -117,7 +117,7 @@ async function test(name, run) {
     assert.equal(E.attackPreview(t).enemyAtk, 7);
     assert.equal(t.nextBattleDef, 3, "预览不能消耗加成");
     E.resolvePlayerAttack();
-    assert.equal(t.hp, 17, "10 攻对 5 防，同骰造成 5 伤害");
+    assert.equal(t.hp, t.hpMax - 5, "10 攻对 5 防，同骰造成 5 伤害");
     assert.equal(t.nextBattleDef, 0); assert.equal(t.nextBattleAtk, 0);
     assert.equal(S.battle.counter, true);
     assert.equal(E.defensePreview(t).enemyAtk, 4, "反击不重复用上场加成");
@@ -142,7 +142,7 @@ async function test(name, run) {
     t.def = { ...t.def, defend: { rule: "always", stance: "dodge" } };
     t.nextBattleAtk = 3; t.nextBattleDef = 3;
     battle("player", t); rolls.push(0.5, 0.5); E.resolvePlayerAttack();
-    assert.equal(t.hp, 22); assert.equal(t.nextBattleDef, 0); assert.equal(t.nextBattleAtk, 0);
+    assert.equal(t.hp, t.hpMax); assert.equal(t.nextBattleDef, 0); assert.equal(t.nextBattleAtk, 0);
   });
 
   await test("新分身登场当轮行动，原怪按登场顺序且每轮仅行动一次", async () => {

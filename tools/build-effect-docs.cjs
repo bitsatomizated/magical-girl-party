@@ -8,15 +8,17 @@ function renderDocument() {
   // install 只注册函数，不运行技能；生成目录时无需真实对局服务。
   require("../js/systems/player-effects.js").install(registry, {});
   require("../js/systems/monster-effects.js").install(registry, {});
+  require("../js/systems/npc-effects.js").install(registry, {});
   const lines = [
     "# 内容扩展与技能时机", "",
-    "本文件由 `npm run docs:effects` 生成。时机来源是 `js/systems/effects.js` 的 `TIMINGS`；处理器清单直接读取两个技能模块。修改接口说明请编辑 `tools/build-effect-docs.cjs` 后重新生成。", "",
+    "本文件由 `npm run docs:effects` 生成。时机来源是 `js/systems/effects.js` 的 `TIMINGS`；处理器清单直接读取三个技能模块。修改接口说明请编辑 `tools/build-effect-docs.cjs` 后重新生成。", "",
     "## 新增内容的入口", "",
     "- 角色、怪物、召唤物、地图配置在 `js/data.js`。角色成长使用自己的 `starGrowth`；省略某星级表示该星级没有属性成长，不会套用其他角色。", "",
     "- 角色主动使用 `activeSkill`，角色被动使用 `passiveSkill`；怪物主动使用 `skill`，怪物被动使用 `passives` 数组。`effect` 指向已注册处理器，名称、说明和参数由数据提供。", "",
     "- 相同机制的新内容只填写参数。新机制新增处理器，并绑定下表已有时机；只有确实需要新的结算位置时，才在引擎接入新时机。", "",
     "- 不再用单个 `trigger` 字符串描述多时机技能：一个处理器可以同时处理经过、攻击取值、击杀等时机，以其注册的 hooks 为准。", "",
     "## 参数配置", "",
+    "NPC 在 `GAME_DATA.npcs` 注册，主动使用 `skill`、被动使用 `passives`；时机为 `npcTurnStart/npcTraits/npcHit`。地图初始投放使用 `initialNpcs`，轮次投放使用 `globalEvents[].npcSpawns`，条目均为 `{ npc, tile }`。具体缠绕、隐身、飞行及强化继承规则见 [女巫塔前单位规则](女巫塔前单位规则.md)。", "",
     "### 角色与召唤物", "",
     "```js",
     "starGrowth: { 1: { atk: 1, hp: 2 }, 2: { speed: 2 }, 3: { def: 1 } },",
@@ -50,7 +52,7 @@ function renderDocument() {
     "校验覆盖注册键与 ID、基本属性和骰子、角色成长、技能挂载时机与参数、难度名称及数值、召唤/目标引用、地图边与连通性、地块与刷怪落点、事件轮次、任务目标与奖励档位、卡池与卡牌引用、筹码稀有度和数值。地图 `upgradeCost` 必须是纯查询函数，校验会调用它查询 0～3 星费用；满星必须返回 null 或 undefined。", "",
     "保留既有默认语义：空或省略 `edges` 使用单环；省略成长不附加成长；按难度参数必须有 `normal` 兜底；合法方向找不到邻格、救援找不到指定格型时仍使用引擎的回退逻辑。事件按格型刷怪则必须能找到该格型。`disabled: true` 不豁免配置校验，避免重新启用时留下错误。", "",
     "技能的参数规则与处理器一起声明：`registerEffect(effect, hooks, parameters)`。规则对象中的字段默认必填，键末尾 `?` 表示可省略，数组写法 `[规则]` 表示非空数组，嵌套对象表示结构校验。已声明参数契约的技能会拒绝未知参数；`effect/name/desc/disabled/minDiff` 为公共字段，主动技能额外要求非负整数 `cooldown`。", "",
-    "规则名：`string`、`boolean`、`number`（有限数）、`nonnegative`、`positive`、`nonnegativeInt`、`positiveInt`、`ratio`（0～1）；引用使用 `monsters/allies/cards/difficulty`；枚举使用 `category/tileType/copyStat`；`flagKey` 禁止占用引擎字段；`difficultyNonnegative/difficultyPositiveInt` 接受单值或带 normal 的难度表。多种合法参数形态可以传入纯函数 `skill => 参数规则对象`，如融合技能的 tiers 与旧版 mob 形式。", "",
+    "规则名：`string`、`boolean`、`number`（有限数）、`nonnegative`、`positive`、`nonnegativeInt`、`positiveInt`、`ratio`（0～1）；引用使用 `monsters/allies/npcs/cards/difficulty`；枚举使用 `category/tileType/copyStat`；`flagKey` 禁止占用引擎字段；`difficultyNonnegative/difficultyPositiveInt` 接受单值或带 normal 的难度表。多种合法参数形态可以传入纯函数 `skill => 参数规则对象`，如融合技能的 tiers 与旧版 mob 形式。", "",
     "旧的两参数注册方式仍可用，此时只检查技能公共字段与挂载时机，无法推断自定义参数。新增机制应提供第三个参数。校验不执行技能处理器，不检查图片是否存在，也不替代规则行为、数值平衡和完整游玩测试。", "",
     "## 时机表", "",
     "表中每一行都有实际引擎调用点。此表描述技能接入位置；回合顺序、战斗与移动续接、定时任务由 `js/systems/turns.js` 统一调度，具体技能和地块规则仍由引擎结算。", "",
@@ -63,7 +65,7 @@ function renderDocument() {
     "2. 玩家落步 → `playerEnterTile` → 铺设青焰 → `playerPassAlly` → 交战询问 → 地块结算。突击传送触发 `playerEnterTile`，沿用原规则不触发 `playerPassAlly`。", "",
     "3. 玩家攻击：`playerAttackValue` → `monsterDefend` → 掷骰和伤害 → 若击杀则 `playerKill` 与公共奖励 → `monsterDamaged` → `playerHit` 与命中筹码 → 存活怪反击。击杀先于命中是现有规则。", "",
     "4. 怪物攻击玩家：`monsterAttack` → 掷骰/姿态 → 扣血及受伤筹码 → `playerDamaged` → `monsterDealtDamage` → `playerLethal` → 未获救则正式击倒。成功闪避或减伤至 0 不触发 `playerDamaged`，吸血处理器也不回血。", "",
-    "5. 玩家行动结束 → `playerTurnEnd` → 非回血持续效果递减 → 友方召唤物 → 怪物逐个行动。回血 buff 在玩家回合开始触发后扣减次数（满血也计次），以毒攻毒共触发两次。怪物先减冷却，再派发 `monsterTurnStart`；主动技冷却未好时不派发该主动技，被动仍可处理此时机。每只怪物自己的行动及战斗结束后，其标记减 1 层；玩家和使魔行动结束不衰减怪物标记。变彩驻守不动，其余现有怪物基础移动为 1d10，技能提供的临时移速另加。学识经过拿牌格加抽一次，落格时在正常两张之外加抽一次。", "",
+    "5. 玩家行动结束 → `playerTurnEnd` → 非回血持续效果递减 → 友方召唤物 → 友方 NPC → 怪物逐个行动。回血 buff 在玩家回合开始触发后扣减次数（满血也计次），以毒攻毒共触发两次。怪物先减冷却，再派发 `monsterTurnStart`；主动技冷却未好时不派发该主动技，被动仍可处理此时机。每只怪物自己的行动及战斗结束后，其标记减 1 层；玩家和使魔行动结束不衰减怪物标记。实验室的变彩驻守不动，其余现有怪物基础移动为 1d10，技能提供的临时移速另加。学识经过拿牌格加抽一次，落格时在正常两张之外加抽一次。", "",
     "6. 经过怪物的效果只由移动方触发；`monsterPassMonster` → `monsterAbsorb` → `monsterFuse`。使魔伤害会触发 `monsterDamaged`，但不会触发玩家命中/击杀技能和筹码。目标已有的标记属于受伤加成：使魔攻击在基础伤害保底 1 点后，每层标记追加 1 点；不会新增或消耗标记，也不会获得猎印 III 的玩家攻击力加成。", "",
     "同次派发按定义顺序同步执行：怪物主动在前、被动数组顺序在后。处理器不得返回 Promise；需要玩家选择时写入 targeting/询问状态，由引擎恢复流程。注册发生一次，处理器通过 `getState()` 或 `Engine.state` 获取当前对局，不能缓存旧局的状态对象。", "",
     "`preview: true` 是纯查询契约：只能修改传入的数值汇总上下文，不能扣资源、推进冷却、写日志或修改单位。现有处理器已按此约定实现并有回归检查；自定义处理器同样需要遵守，分发器不是状态写入沙箱。", "",

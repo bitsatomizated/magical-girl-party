@@ -5,7 +5,7 @@
   const TILE_TYPES = ["start", "draw", "event", "shop", "spawn", "heal", "dash", "chipshop", "damage", "upgrade", "assault", "boss"];
   const CATEGORIES = ["minion", "elite", "boss"];
   // 救援标记目前写在 S 顶层，禁止覆盖引擎字段或 Object 原型字段。
-  const RESERVED_FLAGS = new Set(("round phase over win ask askQueue tiles adj player monsters monsterSeq defCount allies allySeq allyBonuses roundsLimit firedRounds bossRounds battle chipPurchases lastChips chipQueue chipRefreshLeft globalBonus flames quests _dbg move pendingTile targeting targetingResume aiBusy chipChoice waitForChips shop").split(" "));
+  const RESERVED_FLAGS = new Set(("round phase over win ask askQueue tiles adj player monsters monsterSeq defCount npcs npcSeq allies allySeq allyBonuses roundsLimit firedSpecialEvents pendingSpecialEvents firedRounds bossRounds battle chipPurchases lastChips chipQueue chipRefreshLeft globalBonus flames quests _dbg move pendingTile targeting targetingResume aiBusy chipChoice waitForChips shop").split(" "));
 
   function validate(data, definitions = []) {
     const issues = [];
@@ -26,7 +26,7 @@
         return;
       }
       if (isObject(spec)) { fields(value, path, spec, true); return; }
-      if (["monsters", "allies", "cards", "difficulty"].includes(spec)) {
+      if (["monsters", "allies", "npcs", "cards", "difficulty"].includes(spec)) {
         const registry = spec === "difficulty" ? "difficulties" : spec;
         if (typeof value !== "string" || !own(data[registry], value)) fail(path, `引用不存在：${registry}.${String(value)}`);
         return;
@@ -81,7 +81,7 @@
       for (const [id, entry] of Object.entries(entries)) {
         const path = `${key}.${id}`;
         if (!object(entry, path)) continue;
-        if (["characters", "monsters", "allies", "cards", "maps"].includes(key) && entry.id !== id) fail(`${path}.id`, `必须与注册键 ${id} 一致`);
+        if (["characters", "monsters", "allies", "npcs", "cards", "maps"].includes(key) && entry.id !== id) fail(`${path}.id`, `必须与注册键 ${id} 一致`);
         visit(entry, path);
       }
     }
@@ -94,14 +94,16 @@
     function skill(value, path, slot) {
       if (!object(value, path)) return;
       const common = { effect: "string", "name?": "string", "desc?": "string", "disabled?": "boolean", "minDiff?": "difficulty" };
-      if (slot === "playerActive" || slot === "monsterActive") common.cooldown = "nonnegativeInt";
+      if (slot === "playerActive" || slot === "monsterActive" || slot === "npcActive") common.cooldown = "nonnegativeInt";
       const handler = effects.get(value.effect);
       if (!handler) { fields(value, path, common); fail(`${path}.effect`, `未注册技能：${String(value.effect)}`); return; }
       const compatible = {
         playerActive: ["playerActive"],
-        playerPassive: ["playerInit", "playerTurnStart", "playerTurnEnd", "playerEffectCardDamage", "playerCardPlayed", "playerAttackValue", "playerHit", "playerDamaged", "playerEnterTile", "playerKill", "playerLethal", "playerPassAlly", "monsterPassPlayer"],
-        monsterActive: ["monsterTurnStart", "monsterAttack", "monsterDefend"],
-        monsterPassive: ["monsterTurnStart", "monsterStats", "monsterDamageReduction", "monsterDamaged", "monsterDealtDamage", "monsterPassDamage", "monsterPassMonster", "monsterAbsorb", "monsterFuse"],
+        playerPassive: ["playerInit", "playerTurnStart", "playerTurnEnd", "playerEffectCardDamage", "playerCardPlayed", "playerAttackValue", "playerHit", "playerDamaged", "playerEnterTile", "playerKill", "playerLethal", "playerPassAlly", "monsterPassPlayer", "monsterEnterPlayer"],
+        monsterActive: ["monsterTurnStart", "monsterAttack", "monsterDefend", "monsterQuestComplete"],
+        npcActive: ["npcTurnStart"],
+        npcPassive: ["npcTurnStart", "npcTraits", "npcHit"],
+        monsterPassive: ["monsterProtection", "monsterTurnStart", "monsterStats", "monsterDamageReduction", "monsterDamaged", "monsterDealtDamage", "monsterPassDamage", "monsterPassMonster", "monsterAbsorb", "monsterFuse"],
       };
       if (!handler.timings.some(t => compatible[slot].includes(t))) fail(`${path}.effect`, `处理器没有可用于 ${slot} 的触发时机`);
       if (handler.parameters !== null && handler.parameters !== undefined) {
@@ -123,6 +125,11 @@
     }
     registry("characters", character);
     registry("allies", (value, path) => fields(value, path, { name: "string", ...stats, move: { dice: "positiveInt", faces: "positiveInt" } }), false);
+    if (data.npcs !== undefined) registry("npcs", (value, path) => {
+      fields(value, path, { name: "string", ...stats, move: { dice: "positiveInt", faces: "positiveInt" } });
+      if (value.skill != null) skill(value.skill, `${path}.skill`, "npcActive");
+      if (value.passives !== undefined && list(value.passives, `${path}.passives`)) value.passives.forEach((p, i) => skill(p, `${path}.passives[${i}]`, "npcPassive"));
+    }, false);
     registry("monsters", (value, path) => {
       fields(value, path, { name: "string", ...stats, category: "category", coinDrop: "nonnegativeInt", move: { steps: "nonnegativeInt", "stationary?": "boolean" }, "numbered?": "boolean" });
       if (list(value.tags, `${path}.tags`)) value.tags.forEach((tag, i) => enumeration(tag, `${path}.tags[${i}]`, ["passive", "aggressive", "counter", "boss"]));
@@ -147,7 +154,7 @@
     });
 
     function map(value, path) {
-      if (!fields(value, path, { id: "string", name: "string", rounds: "positiveInt", startTile: "nonnegativeInt", shopCost: "nonnegativeInt", chipShopBase: "nonnegativeInt", chipShopStep: "nonnegativeInt", "fixedDifficulty?": "difficulty", "initialSpawn?": "boolean", "hidden?": "boolean" })) return;
+      if (!fields(value, path, { id: "string", name: "string", rounds: "positiveInt", startTile: "nonnegativeInt", shopCost: "nonnegativeInt", chipShopBase: "nonnegativeInt", chipShopStep: "nonnegativeInt", "fixedDifficulty?": "difficulty", "initialSpawn?": "boolean", "eventMinionSpawns?": "boolean", "hidden?": "boolean" })) return;
       if (value.shopOffers !== undefined) fields(value.shopOffers, `${path}.shopOffers`, { "effect?": "nonnegativeInt", "battle?": "nonnegativeInt" }, true);
       // upgradeCost 是现有的纯费用查询接口；检查所有可达星级和满级返回值。
       if (typeof value.upgradeCost !== "function") fail(`${path}.upgradeCost`, "必须是费用查询函数");
@@ -198,25 +205,46 @@
         for (let i = 0; i < queue.length; i++) for (const next of adjacency[queue[i]]) if (!reached.has(next)) { reached.add(next); queue.push(next); }
         if (reached.size !== size) fail(`${path}.edges`, `从起点不可达的格子：${Array.from({ length: size }, (_, i) => i).filter(i => !reached.has(i)).join(", ")}`);
       }
-      if (value.globalEvents !== undefined && list(value.globalEvents, `${path}.globalEvents`)) value.globalEvents.forEach((event, i) => {
-        const at = `${path}.globalEvents[${i}]`;
-        if (!fields(event, at, { round: "positiveInt", "atk?": "nonnegative", "def?": "nonnegative" })) return;
-        if (event.round > value.rounds) fail(`${at}.round`, "不能超过地图轮数上限");
+      if (value.npcRoster !== undefined) rule(value.npcRoster, `${path}.npcRoster`, ["npcs"]);
+      if (value.enemyRoster !== undefined) rule(value.enemyRoster, `${path}.enemyRoster`, ["monsters"]);
+      const npcSpawns = (entries, at) => {
+        if (list(entries, at)) entries.forEach((entry, i) => {
+          if (fields(entry, `${at}[${i}]`, { npc: "npcs" })) tileIndex(entry.tile, `${at}[${i}].tile`);
+          if (entry?.dir !== undefined) direction(entry.dir, `${at}[${i}].dir`);
+        });
+      };
+      if (value.initialNpcs !== undefined) npcSpawns(value.initialNpcs, `${path}.initialNpcs`);
+      const validateEvent = (event, at, scheduled) => {
+        if (!fields(event, at, { ...(scheduled ? { round: "positiveInt" } : {}), "atk?": "nonnegative", "def?": "nonnegative", "allowMinionSpawns?": "boolean" })) return;
+        if (scheduled && event.round > value.rounds) fail(`${at}.round`, "不能超过地图轮数上限");
+        if (event.npcSpawns !== undefined) npcSpawns(event.npcSpawns, `${at}.npcSpawns`);
         if (event.effect !== undefined) enumeration(event.effect, `${at}.effect`, ["allMonstersStats", "allMonstersPlus1"]);
         if (event.spawns !== undefined && list(event.spawns, `${at}.spawns`)) event.spawns.forEach((spawn, j) => {
           const where = `${at}.spawns[${j}]`;
           if (!fields(spawn, where, { mob: "monsters", "count?": "positiveInt" })) return;
+          if (value.eventMinionSpawns === false && event.allowMinionSpawns !== true && data.monsters?.[spawn.mob]?.category === "minion") fail(`${where}.mob`, "此地图禁止未显式允许的事件投放小怪");
           if (typeof spawn.tiles === "string") {
             rule(spawn.tiles, `${where}.tiles`, "tileType");
             if (!value.tiles.some(t => t?.t === spawn.tiles)) fail(`${where}.tiles`, "地图上没有此类型的刷怪落点");
           } else if (list(spawn.tiles, `${where}.tiles`, true)) spawn.tiles.forEach((tile, k) => tileIndex(tile, `${where}.tiles[${k}]`));
           if (spawn.dir !== undefined) direction(spawn.dir, `${where}.dir`);
         });
-      });
+      };
+      if (value.globalEvents !== undefined && list(value.globalEvents, `${path}.globalEvents`)) value.globalEvents.forEach((e, i) => validateEvent(e, `${path}.globalEvents[${i}]`, true));
+      if (value.specialEvents !== undefined && object(value.specialEvents, `${path}.specialEvents`)) Object.entries(value.specialEvents).forEach(([id, e]) => validateEvent(e, `${path}.specialEvents.${id}`, false));
       if (value.quests !== undefined && list(value.quests, `${path}.quests`)) value.quests.forEach((quest, i) => {
         const at = `${path}.quests[${i}]`;
         if (!fields(quest, at, { need: "positiveInt" })) return;
-        enumeration(quest.rewardTier, `${at}.rewardTier`, [1, 2, 3]);
+        if (quest.condition !== undefined) enumeration(quest.condition, `${at}.condition`, ["hpAtMost"]);
+        if (quest.condition === "hpAtMost") {
+          rule(quest.hpRatio, `${at}.hpRatio`, "ratio");
+          if (quest.victory !== true) fail(`${at}.victory`, "血量目标必须配置为胜利任务");
+          if (quest.need !== 1) fail(`${at}.need`, "血量目标的次数必须为1");
+        } else {
+          enumeration(quest.rewardTier, `${at}.rewardTier`, [1, 2, 3]);
+          if (quest.victory !== undefined) fail(`${at}.victory`, "胜利任务须配置血量条件");
+        }
+        if (quest.triggerEvent !== undefined && !own(value.specialEvents, quest.triggerEvent)) fail(`${at}.triggerEvent`, "特殊事件引用不存在");
         if (quest.targets !== undefined) rule(quest.targets, `${at}.targets`, ["monsters"]);
         if (quest.target !== undefined || quest.targets === undefined) rule(quest.target, `${at}.target`, "monsters");
         if (quest.extra !== undefined) enumeration(quest.extra, `${at}.extra`, ["roundProgressMinus1"]);

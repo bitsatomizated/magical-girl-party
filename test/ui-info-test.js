@@ -45,7 +45,9 @@ function withMonster(S, id, uid, pos) {
 console.log("[1] 被动技能显示（普通难度：难度限定的被动不显示）");
 const S1 = start("normal");
 const h1 = infoHTML();
-check("图鉴移动展示为 1d10", h1.includes("每回合 1d10 格") && !h1.includes("每回合 1 格"));
+check("图鉴隐藏默认1d10，保留移动行为", !h1.includes("1d10") && h1.includes("移动："));
+check("反击仅在独立字段显示一次", [...w.document.querySelectorAll(".info-mob")].every(el =>
+  (el.textContent.match(/反击/g) || []).length === 1));
 check("不显示仅噩梦/疯狂生效的【女仆链接】", !h1.includes("女仆链接"));
 check("显示【晕彩救援】被动及其效果", h1.includes("被动【晕彩救援】") && h1.includes("晕彩在升星点登场"));
 check("不出现难度标注之类的冗余文案",
@@ -59,7 +61,7 @@ const h2 = infoHTML();
 check("显示【女仆链接】", h2.includes("被动【女仆链接】"));
 check("显示其效果说明（无难度标注）",
   h2.includes("下次移动速度 +2") && !h2.includes("难度生效"));
-check("噩梦数值同步（安若素生命上限 20）", h2.includes("女仆安若素") && /女仆安若素<\/b>[^]*?HP 上限 20/.test(h2));
+check("噩梦数值同步（安若素生命上限 24）", h2.includes("女仆安若素") && /女仆安若素<\/b>[^]*?HP 上限 24/.test(h2));
 
 console.log("[3] 主动技能显示名称、说明与冷却状态");
 const S3 = start("normal");
@@ -197,7 +199,7 @@ console.log("[10] 移动方向显示：箭头与真实走向一致（不误导�
   check("登场方向随机的怪不预告箭头（peekNext 为 null）", w.Engine.peekNext(mRandom) === null);
   check("棋盘上不画该怪的方向箭头", !w.document.querySelector("#board svg").innerHTML.includes("arr-m"));
   check("不再逐个报告怪物方向（「方向未定」改由棋盘箭头表达）", !infoHTML().includes("方向未定"));
-  check("图鉴给出品种级移速说明", infoHTML().includes("移速："));
+  check("图鉴给出品种级移动行为", infoHTML().includes("移动："));
   mRandom.initRandom = false; mRandom.lastFrom = S.adj[5][0];
   mRandom.queuedNext = 6; // 已预掷的下一步（引擎内在每步落地时由 rollNextStep 写入）
   w.UI.renderAll();
@@ -313,7 +315,7 @@ console.log("[14] 图鉴归并：同品种一条，个体数值挂到棋盘与�
     !h.includes("HP 8/8") && !/HP \d+\/\d+、/.test(h));
   check("默认防御的怪不显示「守方倾向」", !h.includes("守方倾向"));
   check("异种另有独立条目", h.includes("女仆缇娜</b>") && h.includes("场上 1 只"));
-  check("图鉴给出品种级移速说明", h.includes("移速："));
+  check("图鉴给出品种级移动行为", h.includes("移动："));
 
   const boardHTML = () => w.document.querySelector("#board svg").innerHTML;
   check("棋盘按只列出（不归并）",
