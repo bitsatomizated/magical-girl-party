@@ -17,6 +17,7 @@
     monsterPassPlayer: { scope: "角色被动", at: "怪物移动进入玩家格，且本次移动尚未攻击时；先于主动攻击判定", context: "monster" },
     monsterTurnStart: { scope: "怪物主动/被动", at: "怪物冷却递减后、移动前；驻守怪同样执行", context: "monster" },
     monsterStats: { scope: "怪物被动", at: "查询有效攻防，不修改状态", context: "monster, atk, def, preview", preview: true },
+    monsterDamageReduction: { scope: "怪物被动", at: "查询最终伤害减免，标记增伤之后扣除；不修改状态", context: "monster, reduction, preview", preview: true },
     monsterDefend: { scope: "怪物主动", at: "玩家攻击力计算后、双方掷骰前", context: "monster, battle, reduction" },
     monsterAttack: { scope: "怪物主动", at: "玩家选定姿态后、双方掷骰前；预览可查询骰点加成", context: "monster, diceBonus, preview", preview: true },
     monsterDamaged: { scope: "怪物被动", at: "扣血及击杀结算后，包含使魔伤害；保留被击杀单位上下文", context: "monster, source" },

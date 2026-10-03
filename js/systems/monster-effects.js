@@ -16,6 +16,12 @@
         c.atk += n * p.atkPer; c.def += n * p.defPer;
       },
     }, { atkPer: "nonnegative", defPer: "nonnegative" });
+    effects.register("crowdGuard", {
+      monsterDamageReduction(p, c) {
+        const n = getState().monsters.filter(m => m !== c.monster && m.hp > 0).length;
+        c.reduction += n * p.reductionPer;
+      },
+    }, { reductionPer: "nonnegative" });
     effects.register("yuncaiRescue", {
       monsterDamaged(p, { monster: m }) {
         const S = getState();

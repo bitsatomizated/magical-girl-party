@@ -172,7 +172,7 @@ window.UI = (() => {
       `<br>主动【${P.activeSkill.name}】（CD${Engine.skillCooldown()}）：${P.activeSkill.desc} ${cd > 0 ? `｜冷却中：${cd} 轮` : "｜<span class='good'>就绪</span>"}` +
       `<br>被动【${P.passiveSkill.name}】：${P.passiveSkill.desc}` +
       Object.keys(S.player.cardDamageBonuses || {}).map(id =>
-        `<br><span class="good">【${D.cards[id].name}】当前伤害 ${Engine.effectCardDamage(D.cards[id])}｜本局累计 +${S.player.cardDamageBonuses[id]}｜充能 ${S.player.cardPlayCounts[id] % P.passiveSkill.everyCards}/${P.passiveSkill.everyCards}</span>`).join("") +
+        `<br><span class="good">【${D.cards[id].name}】当前伤害 ${Engine.effectCardDamage(D.cards[id])}｜本局累计 +${S.player.cardDamageBonuses[id]}${P.passiveSkill.everyCards > 1 ? `｜充能 ${S.player.cardPlayCounts[id] % P.passiveSkill.everyCards}/${P.passiveSkill.everyCards}` : ""}</span>`).join("") +
       (S.player.buffs.length ? `<br>当前效果：${S.player.buffs.map(b =>
         `【${b.name}】${b.atk ? `攻+${b.atk}` : ""}${b.dmgTaken ? "（受伤+1）" : ""}${b.heal ? "（回合开始回血）" : ""}`).join(" ")}` : "") +
       `</div>`;
@@ -229,7 +229,7 @@ window.UI = (() => {
         html += `<div class="info-mob${pickable ? " pickable" : ""}"${pickable ? ` data-uid="${m.uid}"` : ""}${candIds && !pickable ? ' style="opacity:.4"' : ""}>` +
           (pickable ? `<span class="pick-idx">${no}</span>` : "") + mobArt(m.def) +
           `<b>${m.name}</b>（${catCN(m.def.category)}）HP ${m.hp}/${m.hpMax} 攻${m.atk} 防${m.def_}` +
-          speciesLines(m.def) + `</div>`;
+          speciesLines(m.def) + (Engine.monsterDamageReduction(m) ? `<br>当前减伤 ${Engine.monsterDamageReduction(m)}（每次伤害最低 1）` : "") + `</div>`;
       });
     } else {
       // —— 图鉴模式：同品种归并为一条 ——
@@ -248,7 +248,7 @@ window.UI = (() => {
         html += `<div class="info-mob">` + mobArt(d) +
           `<b>${d.name}</b>（${catCN(d.category)}）HP 上限 ${list[0].hpMax}｜攻 ${rng(atks)}｜防 ${rng(defs)}｜悬赏 ◉${d.coinDrop}｜` +
           `<span class="${alive ? "good" : "warn"}">场上 ${list.length} 只${alive !== list.length ? `（存活 ${alive}）` : ""}</span>` +
-          speciesLines(d) + `</div>`;
+          speciesLines(d) + (Engine.monsterDamageReduction(list[0]) ? `<br>当前减伤 ${Engine.monsterDamageReduction(list[0])}（每次伤害最低 1）` : "") + `</div>`;
       });
     }
     html += `</div>`;
@@ -501,7 +501,7 @@ window.UI = (() => {
         `<b>我方</b>攻击 <b>${apv.total}</b>${b.cardBonus ? "+" + b.cardBonus : ""}${apv.parts.length ? `（${apv.parts.join("，")}）` : ""}｜战斗点数 <b>${Engine.playerBattlePoints() - b.spentPoints}</b>（已用 ${b.spentPoints}）<br>` +
         `<b>敌方</b>【${t.name}】HP <b>${t.hp}/${t.hpMax}</b>｜攻 <b>${enemyAtk}</b>｜防 <b>${enemyDef}</b>｜姿态 <b>${STANCE_CN[apv.stance] || "防御"}</b>${t.marks ? `｜标记 ${t.marks} 层（我方伤害 +${t.marks}）` : ""}<br>` +
         battleStateLine(S, t) +
-        `结算：我方 ${apv.total}${b.cardBonus ? "+" + b.cardBonus : ""} + 我方骰 vs 敌方 ${enemyDef} + 敌方骰，伤害保底 1${apv.stance === "dodge" ? "；敌方闪避姿态时改比骰点（我方骰 ≥ 敌方骰则它不受伤）" : ""}`;
+        `结算：我方 ${apv.total}${b.cardBonus ? "+" + b.cardBonus : ""} + 我方骰 vs 敌方 ${enemyDef} + 敌方骰，伤害保底 1${Engine.monsterDamageReduction(t) ? `；标记增伤后再减伤 ${Engine.monsterDamageReduction(t)}，最低 1` : ""}${apv.stance === "dodge" ? "；敌方闪避姿态时改比骰点（我方骰 ≥ 敌方骰则它不受伤）" : ""}`;
       const pts = Engine.playerBattlePoints() - b.spentPoints;
       S.player.hand.filter(c => c.type === "battle" && c.kind === "atk").forEach(c => {
         const el = document.createElement("div");

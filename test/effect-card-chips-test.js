@@ -72,11 +72,11 @@ async function play(id, target) {
   {
     const { P } = start("char_xingmeng"); P.chips = ["amplify", "guidance"];
     const m = monster(1);
-    for (const [damage,next] of [[4,4],[5,5],[7,5]]) {
+    for (const [damage,next] of [[4,5],[6,6],[8,7]]) {
       const hp=m.hp; await play("arcaneLaser",m);
       assert.equal(hp-m.hp,damage); assert.equal(E.effectCardDamage(D.cards.arcaneLaser),next);
     }
-    assert.equal(P.cardDamageBonuses.arcaneLaser, 1, "增幅不计入永久成长");
+    assert.equal(P.cardDamageBonuses.arcaneLaser, 3, "增幅不计入永久成长");
     assert.equal(P.cardPlayCounts.arcaneLaser, 3, "引导不额外增加出牌次数");
   }
   {

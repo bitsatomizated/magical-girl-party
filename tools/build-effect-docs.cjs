@@ -42,6 +42,7 @@ function renderDocument() {
     "- `devourMinions`：`targets/perCount/atkPer` 指定猎物、成长所需数量和成长值。`perCount` 可以按难度配置。", "",
     "- `spawnAround/fuseMinions/devourMinion`：通过 `mob/count/radius` 或 `tiers/from/into` 指定生成和融合规则。", "",
     "- `yuxiaShot`：`value/bonusPerStrong/strongCategories` 控制基础伤害及按难度、场上存活单位分类数量追加的伤害，包含施法者自身。", "",
+    "- `crowdGuard`：`reductionPer` 指定每只其他存活怪物提供的最终减伤，标记增伤后扣除，命中最低 1；玩家与使魔共用纯查询接口。", "",
     "- `bossAura/bloodDrain/passDamage`：分别使用 `atkPer/defPer`、`ratio`、`multiplier` 配置数值。", "",
     "## 内容配置校验", "",
     "页面在所有技能模块加载完成后、展示选角界面前校验整个内容库（包含隐藏地图）；每次 `Engine.newGame()` 也会在重置旧局、抽牌和刷怪之前重新检查。失败会一次性报告内容 ID 和字段路径，例如 `characters.char_rococo.activeSkill.summon`。页面初始配置出错时显示错误并禁用开始按钮。", "",

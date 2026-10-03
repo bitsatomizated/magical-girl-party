@@ -43,7 +43,7 @@ const of = (id) => E.state.monsters.filter(m => m.def.id === id);
     M("lab_variant").move.stationary === true && !M("lab_variant").tags.includes("aggressive") && !M("lab_variant").tags.includes("counter"));
   check("变彩：卡牌融合 CD2 + 卡牌守护",
     M("lab_variant").skill.effect === "fuseMinions" && M("lab_variant").skill.cooldown === 2 &&
-    M("lab_variant").passives.some(p => p.effect === "bossAura"));
+    M("lab_variant").passives.some(p => p.effect === "crowdGuard"));
   check("困难档数值：游荡 5/3、雷鸟 9、三头犬 11、奇美拉 30、变彩 72",
     M("lab_wander").diffStats.hard.hpMax === 5 && M("lab_wander").diffStats.hard.attack === 3 &&
     M("lab_thunderbird").diffStats.hard.hpMax === 9 && M("lab_cerberus").diffStats.hard.hpMax === 11 &&
@@ -139,10 +139,10 @@ const of = (id) => E.state.monsters.filter(m => m.def.id === id);
   S.monsters.push(boss);
   check("场上只有自己时无光环", X.auraBonus(boss).atk === 0 && X.effDef(boss) === boss.def_ && X.effAtk(boss) === boss.atk);
   S.monsters.push(X.makeMonster(M("lab_wander"), 1), X.makeMonster(M("lab_wander"), 2));
-  check("场上 2 只其他怪：攻防各 +2", X.auraBonus(boss).atk === 2 && X.auraBonus(boss).def === 2);
-  check("effAtk / effDef 计入光环", X.effAtk(boss) === boss.atk + 2 && X.effDef(boss) === boss.def_ + 2);
+  check("场上 2 只其他怪：减伤 2", E.monsterDamageReduction(boss) === 2);
+  check("卡牌守护不再增加攻防", X.effAtk(boss) === boss.atk && X.effDef(boss) === boss.def_);
   check("光环不写回基础值（击倒小怪即刻回落）",
-    (S.monsters = [boss], X.auraBonus(boss).atk === 0 && X.effAtk(boss) === boss.atk));
+    (S.monsters = [boss], E.monsterDamageReduction(boss) === 0 && X.effAtk(boss) === boss.atk));
 
   // ---- [6] 变彩「卡牌融合」 ----
   console.log("[6] 卡牌融合");

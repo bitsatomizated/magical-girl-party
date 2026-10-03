@@ -152,7 +152,7 @@ window.Engine = (() => {
       lastFrom: null }; // 上一回合的来路：下回合起步继承（首次移动为 null → 用登场/初始方向）
   }
 
-  // 光环类被动（卡牌守护）：场上每存在一只其他怪物，自身攻防 +1
+  // 攻防光环类被动；卡牌守护的减伤由 monsterDamageReduction 独立查询。
   // 动态计算、不写回 m.atk/def_，因此怪多怪少会即时反映，击倒小怪即可削弱 BOSS
   function auraBonus(m) {
     const c = monsterEffects("monsterStats", m, { atk: 0, def: 0, preview: true });
@@ -1017,15 +1017,25 @@ window.Engine = (() => {
     return dealt;
   }
 
-  // 标记是目标的受伤加成，玩家与使魔共用；不触发攻击者的命中/击杀词条。
+  // 纯查询：所有伤害来源在标记加成后扣减伤，命中最低 1；闪避未命中不进入此流程。
+  function monsterDamageReduction(m) {
+    return monsterEffects("monsterDamageReduction", m, { reduction: 0, preview: true }).reduction;
+  }
+  function monsterDamagePreview(m, base) {
+    return Math.max(1, Math.max(1, base) + (m.marks || 0) - monsterDamageReduction(m));
+  }
+
+  // 标记与减伤由玩家、使魔共用；不触发攻击者的命中/击杀词条。
   function markedDamage(m, base) {
     const marks = m.marks || 0;
-    const total = Math.max(1, base) + marks;
+    const reduction = monsterDamageReduction(m);
+    const total = monsterDamagePreview(m, base);
     if (marks > 0) log(`【${m.name}】身负 ${marks} 层标记，伤害 +${marks}。`);
+    if (reduction > 0) log(`【${m.name}】减伤 ${reduction}，本次最终伤害 ${total}（最低 1）。`);
     return total;
   }
 
-  // 对怪物造成伤害：每层标记使本次伤害 +1；返回实际总伤害
+  // 对怪物造成伤害：先标记增伤，再减伤；返回实际总伤害
   // 命中词条（猎印挂标记 / 财力挣金币）不在这里触发——它只属于「战斗攻击」，
   // 由 resolvePlayerAttack 在结算后显式调用 onHitEnemy；出牌伤害与青焰等效果伤害不触发。
   function dealToMonster(m, base) {
@@ -1210,7 +1220,7 @@ window.Engine = (() => {
   }
 
   // 使魔攻击一只怪物：双方各掷 d6，计入目标已有标记；不触发玩家筹码（不走 onHitEnemy）。
-  // 防御读 effDef（计入变彩光环与骑士守护等临时防御）；晕彩救援的触发面与 dealToMonster 一致（低血或击倒）
+  // 防御读 effDef，伤害共用标记/减伤；晕彩救援的触发面与 dealToMonster 一致（低血或击倒）
   function allyStrike(a, m) {
     const aRoll = d6(), mRoll = d6();
     const dmg = markedDamage(m, a.atk + aRoll - (effDef(m) + mRoll));
@@ -1596,7 +1606,7 @@ window.Engine = (() => {
     attackPreview, defensePreview, pickMoveStep, peekPlayerNext, peekPlayerOptions, peekNext, peekAllyNext, graphDist,
     buyShop, closeShop, pickChip, chipShopPrice, chooseTarget, cancelTargeting, refreshChips,
     chooseDeployTile,
-    derived, effectCardDamage, cardDescription, maxHandSize, skillCooldown,
+    derived, effectCardDamage, cardDescription, maxHandSize, skillCooldown, monsterDamageReduction, monsterDamagePreview,
     // 无头测试与规则模拟的显式接口；测试不再改写引擎源码注入导出。
     _test: {
       ask, aiMove, aiTurns, checkPlayerKo, advanceRoundProgress, rewindRoundProgress,

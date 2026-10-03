@@ -136,8 +136,8 @@ GAME_DATA.characters = {
       desc: "丢弃所有战斗牌，费用合计每满 3 点获得 1 张【魔导激光】（余数不保留，遵守当前手牌上限）",
       effect: "manaRecycle", card: "arcaneLaser", costPerCard: 3 },
     passiveSkill: { name: "魔导充能",
-      desc: "每回合开始时，若手牌不超过 6 张，获得 1 张【魔导激光】；每累计打出 2 张，之后所有魔导激光的伤害在本局永久 +1（初始 3 点，射程 8 格）",
-      effect: "arcaneCharge", card: "arcaneLaser", handLimit: 6, growth: 1, everyCards: 2 },
+      desc: "每回合开始时，若手牌不超过 6 张，获得 1 张【魔导激光】；每打出 1 张，之后所有魔导激光的伤害在本局永久 +1（初始 3 点，射程 8 格）",
+      effect: "arcaneCharge", card: "arcaneLaser", handLimit: 6, growth: 1, everyCards: 1 },
   },
 };
 
@@ -304,7 +304,7 @@ GAME_DATA.monsters = {
                         { from: ["lab_thunderbird", "lab_cerberus"], count: 2, into: ["lab_chimera"] },
                       ],
                       desc: "优先把两只游荡魔物融合成一只一级精英；场上小怪不足两只时，才把两只一级精英合成奇美拉。产物落在自身周围 2 格内" },
-             passives: [ { name: "卡牌守护", desc: "场上每存在一只其他怪物，自身攻防 +1（动态结算，清怪会立刻削弱它）", effect: "bossAura", atkPer: 1, defPer: 1 } ],
+             passives: [ { name: "卡牌守护", desc: "场上每存在一只其他存活怪物，自身受到的伤害 -1（所有伤害来源生效，每次伤害最低为 1；清怪会立刻削弱守护）", effect: "crowdGuard", reductionPer: 1 } ],
              diffStats: {
                hard:      { hpMax: 72 },
                nightmare: { hpMax: 77, attack: 5 },

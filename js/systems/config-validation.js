@@ -101,7 +101,7 @@
         playerActive: ["playerActive"],
         playerPassive: ["playerInit", "playerTurnStart", "playerTurnEnd", "playerEffectCardDamage", "playerCardPlayed", "playerAttackValue", "playerHit", "playerDamaged", "playerEnterTile", "playerKill", "playerLethal", "playerPassAlly", "monsterPassPlayer"],
         monsterActive: ["monsterTurnStart", "monsterAttack", "monsterDefend"],
-        monsterPassive: ["monsterTurnStart", "monsterStats", "monsterDamaged", "monsterDealtDamage", "monsterPassDamage", "monsterPassMonster", "monsterAbsorb", "monsterFuse"],
+        monsterPassive: ["monsterTurnStart", "monsterStats", "monsterDamageReduction", "monsterDamaged", "monsterDealtDamage", "monsterPassDamage", "monsterPassMonster", "monsterAbsorb", "monsterFuse"],
       };
       if (!handler.timings.some(t => compatible[slot].includes(t))) fail(`${path}.effect`, `处理器没有可用于 ${slot} 的触发时机`);
       if (handler.parameters !== null && handler.parameters !== undefined) {

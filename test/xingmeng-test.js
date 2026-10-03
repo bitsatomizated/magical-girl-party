@@ -108,40 +108,40 @@ async function fire(m) {
     assert.equal(await E.playCard(0), false, "范围内没有目标不能使用");
     at8.pos = 8;
     await fire(at8); assert.equal(at8.hp, 97);
-    assert.equal(E.effectCardDamage(P.hand[0]), 3, "第一张只增加充能进度");
+    assert.equal(E.effectCardDamage(P.hand[0]), 4, "第一张结算后立即成长");
     assert.equal(P.cardPlayCounts.arcaneLaser, 1, "取消和无效目标不计入次数");
-    assert.equal(E.cardDescription(P.hand[0]), "指定8格内一名怪物，造成3点伤害");
-    assert.match(w.document.getElementById("hand").textContent, /造成3点伤害/);
-    assert.match(w.document.getElementById("info").textContent, /充能 1\/2/);
-    for (let i = 0; i < 3; i++) w.UI.renderAll();
-    assert.equal(E.effectCardDamage(laser()), 3, "预览不叠加成长");
-    X.startRound();
-    assert.equal(P.cardPlayCounts.arcaneLaser, 1, "跨回合保留未满两张的进度");
-    await fire(at8); assert.equal(at8.hp, 94);
-    assert.equal(E.effectCardDamage(P.hand[0]), 4, "第二张结算后，已有副本共享成长");
     assert.equal(E.cardDescription(P.hand[0]), "指定8格内一名怪物，造成4点伤害");
     assert.match(w.document.getElementById("hand").textContent, /造成4点伤害/);
-    assert.match(w.document.getElementById("info").textContent, /充能 0\/2/);
+    assert.match(w.document.getElementById("info").textContent, /本局累计 \+1/);
+    for (let i = 0; i < 3; i++) w.UI.renderAll();
+    assert.equal(E.effectCardDamage(laser()), 4, "预览不叠加成长");
+    X.startRound();
+    assert.equal(P.cardPlayCounts.arcaneLaser, 1, "跨回合保留累计次数");
+    await fire(at8); assert.equal(at8.hp, 93);
+    assert.equal(E.effectCardDamage(P.hand[0]), 5, "第二张结算后，已有副本共享成长");
+    assert.equal(E.cardDescription(P.hand[0]), "指定8格内一名怪物，造成5点伤害");
+    assert.match(w.document.getElementById("hand").textContent, /造成5点伤害/);
+    assert.match(w.document.getElementById("info").textContent, /本局累计 \+2/);
     P.hand = [D.cards.katana]; E.useSkill();
-    assert.equal(E.effectCardDamage(P.hand[0]), 4, "新生成副本共享成长");
-    await fire(at8); assert.equal(at8.hp, 90);
+    assert.equal(E.effectCardDamage(P.hand[0]), 5, "新生成副本共享成长");
+    await fire(at8); assert.equal(at8.hp, 88);
     P.hand = hand("laser", "atk_s"); at8.pos = 1;
     await E.playCard(0); E.chooseTarget(at8.uid);
-    assert.equal(at8.hp, 87, "普通激光保持 3 点");
+    assert.equal(at8.hp, 85, "普通激光保持 3 点");
     X.startBattle("player", at8); E.playBattleCard("atk_s");
-    assert.equal(E.effectCardDamage(laser()), 4, "普通效果牌和战斗牌不增加专属成长");
+    assert.equal(E.effectCardDamage(laser()), 6, "普通效果牌和战斗牌不增加专属成长");
     assert.equal(P.cardPlayCounts.arcaneLaser, 3, "普通牌不计入充能次数");
     S.battle = null; S.phase = "play";
     P.hp = 0; X.checkPlayerKo();
-    assert.equal(P.ko, true); assert.equal(E.effectCardDamage(laser()), 4);
-    X.startRound(); assert.equal(P.ko, false); assert.equal(E.effectCardDamage(laser()), 4);
-    assert.equal(P.cardPlayCounts.arcaneLaser, 3, "复活保留未满两张的进度");
+    assert.equal(P.ko, true); assert.equal(E.effectCardDamage(laser()), 6);
+    X.startRound(); assert.equal(P.ko, false); assert.equal(E.effectCardDamage(laser()), 6);
+    assert.equal(P.cardPlayCounts.arcaneLaser, 3, "复活保留累计次数");
     at8.hp = 100; at8.marks = 0;
     P.hand = [laser(), laser(), laser()];
-    for (const expected of [4, 5, 5]) {
+    for (const expected of [6, 7, 8]) {
       const hp = at8.hp; await fire(at8); assert.equal(hp - at8.hp, expected);
     }
-    assert.equal(E.effectCardDamage(laser()), 6, "第六张结算后提升至 6 点");
+    assert.equal(E.effectCardDamage(laser()), 9, "第六张结算后提升至 9 点");
     E.newGame(); assert.equal(E.effectCardDamage(laser()), 3, "新对局重置成长");
     assert.equal(E.state.player.cardPlayCounts.arcaneLaser, 0, "新对局重置进度");
   }
@@ -153,7 +153,7 @@ async function fire(m) {
     await fire(m);
     assert.ok(!S.monsters.includes(m), "标记增伤与击杀生效");
     assert.equal(q.progress, 1); assert.equal(P.coins, coins + m.def.coinDrop + 1);
-    assert.equal(E.effectCardDamage(laser()), 3, "首次击杀只增加充能");
+    assert.equal(E.effectCardDamage(laser()), 4, "首次击杀立即成长");
     assert.equal(P.cardPlayCounts.arcaneLaser, 1);
   }
   {
@@ -162,7 +162,7 @@ async function fire(m) {
     P.hand = [laser()];
     const m = target(S, P.pos, "boss"); m.hp = 3;
     await fire(m);
-    assert.equal(S.over, true); assert.equal(E.effectCardDamage(laser()), 4, "终局击杀完成出牌结算");
+    assert.equal(S.over, true); assert.equal(E.effectCardDamage(laser()), 5, "终局击杀完成出牌结算");
   }
   console.log("PASS 星梦角色、界面、回收、充能、动态伤害、射程、击杀与重开");
   dom.window.close();
